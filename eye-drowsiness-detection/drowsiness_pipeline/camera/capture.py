@@ -11,9 +11,9 @@ class CameraConfig:
     """Settings applied when opening a webcam."""
 
     index: int = 0
-    width: int = 2592
-    height: int = 1944
-    fps: int = 15
+    width: int = 1280
+    height: int = 720
+    fps: int = 30
 
 
 class WebcamCapture:

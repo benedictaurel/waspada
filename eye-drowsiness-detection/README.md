@@ -15,6 +15,7 @@ python --version
 If multiple Python versions are installed, select 3.11 explicitly:
 
 ```powershell
+cd eye-drowsiness-detection
 py -3.11 -m venv .venv
 .venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip

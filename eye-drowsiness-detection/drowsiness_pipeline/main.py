@@ -93,6 +93,9 @@ def _sound_alert() -> None:
 def run(args: argparse.Namespace) -> int:
     import cv2
 
+    target_frame_time = 1.0 / args.fps
+    next_frame_time = time.perf_counter()
+
     camera_config = CameraConfig(args.camera_index, args.width, args.height, args.fps)
     monitor = DrowsinessMonitor(args.ear_threshold, args.consecutive_frames)
     preprocessor = FramePreprocessor(use_clahe=args.clahe)
@@ -107,6 +110,16 @@ def run(args: argparse.Namespace) -> int:
             model_path=args.model_path
         ) as detector:
             while args.max_frames is None or frames_seen < args.max_frames:
+                now = time.perf_counter()
+
+                if now < next_frame_time:
+                    time.sleep(next_frame_time - now)
+
+                next_frame_time = max(
+                    next_frame_time + target_frame_time,
+                    time.perf_counter()
+                )
+    
                 frame = camera.read()
                 frames_seen += 1
 
