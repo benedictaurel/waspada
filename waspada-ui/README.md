@@ -8,7 +8,9 @@ Driver registration stores identity and contact details. Driving time is calcula
 cp .env.example .env.local
 ```
 
-2. Run the following commands to setup the dashboard:
+2. Copy supabase/schema.sql to Supabase SQL editor.
+
+3. Run the following commands to setup the dashboard:
 ```
 pnpm install
 pnpm dev
