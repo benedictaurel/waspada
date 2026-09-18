@@ -7,6 +7,7 @@ import time
 from collections import deque
 from collections.abc import Sequence
 
+from drowsiness_pipeline.utils.wheel_vibration import vibrate_sine
 from drowsiness_pipeline.camera import CameraConfig, WebcamCapture
 from drowsiness_pipeline.core import FaceLandmarkDetector, average_ear
 from drowsiness_pipeline.logic import DrowsinessMonitor, DrowsinessStatus
@@ -137,7 +138,16 @@ def run(args: argparse.Namespace) -> int:
                             f"(EAR={status.ear:.3f})",
                             flush=True,
                         )
+
                         _sound_alert()
+
+                        try:
+                            vibrate_sine(2.0)
+                        except Exception as exc:
+                            print(
+                                f"[Wheel vibration error] {exc}",
+                                flush=True,
+                            )
                 else:
                     # Eye contours belong to the last processed frame and should
                     # not be drawn at stale coordinates on a newer frame.

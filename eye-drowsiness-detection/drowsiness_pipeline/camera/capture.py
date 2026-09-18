@@ -1,4 +1,4 @@
-"""OpenCV-backed camera acquisition."""
+"""Camera acquisition with Raspberry Pi Picamera2 support."""
 
 from __future__ import annotations
 
@@ -8,8 +8,6 @@ from typing import Any
 
 @dataclass(frozen=True)
 class CameraConfig:
-    """Settings applied when opening a webcam."""
-
     index: int = 0
     width: int = 1280
     height: int = 720
@@ -17,7 +15,7 @@ class CameraConfig:
 
 
 class WebcamCapture:
-    """Small context-managed wrapper around ``cv2.VideoCapture``."""
+    """Camera wrapper supporting Raspberry Pi CSI camera."""
 
     def __init__(self, config: CameraConfig | None = None) -> None:
         self.config = config or CameraConfig()
@@ -28,36 +26,56 @@ class WebcamCapture:
             return self
 
         try:
-            import cv2
-        except ImportError as exc:  # pragma: no cover - depends on runtime setup
+            from picamera2 import Picamera2
+
+            picam2 = Picamera2()
+
+            camera_config = picam2.create_video_configuration(
+                main={
+                    "size": (self.config.width, self.config.height),
+                    "format": "RGB888",
+                },
+                controls={
+                    "FrameRate": self.config.fps,
+                },
+            )
+
+            picam2.configure(camera_config)
+            picam2.start()
+
+            self._capture = picam2
+
+            print(
+                f"[Camera] Picamera2 "
+                f"{self.config.width}x{self.config.height}@{self.config.fps}"
+            )
+
+            return self
+
+        except Exception as exc:
             raise RuntimeError(
-                "OpenCV is not installed. Run: pip install -r requirements.txt"
+                f"Failed to open Raspberry Pi camera: {exc}"
             ) from exc
 
-        capture = cv2.VideoCapture(self.config.index)
-        if not capture.isOpened():
-            capture.release()
-            raise RuntimeError(f"Could not open camera index {self.config.index}")
-
-        capture.set(cv2.CAP_PROP_FRAME_WIDTH, self.config.width)
-        capture.set(cv2.CAP_PROP_FRAME_HEIGHT, self.config.height)
-        capture.set(cv2.CAP_PROP_FPS, self.config.fps)
-        self._capture = capture
-        return self
-
     def read(self) -> Any:
-        """Return the next BGR frame or raise if acquisition fails."""
         if self._capture is None:
             raise RuntimeError("Camera is not open")
 
-        ok, frame = self._capture.read()
-        if not ok or frame is None:
-            raise RuntimeError("Failed to read a frame from the camera")
+        import cv2
+
+        frame = self._capture.capture_array()
+
+        if frame is None:
+            raise RuntimeError("Failed to capture frame")
+
+        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+
         return frame
 
     def close(self) -> None:
         if self._capture is not None:
-            self._capture.release()
+            self._capture.stop()
+            self._capture.close()
             self._capture = None
 
     def __enter__(self) -> "WebcamCapture":
@@ -65,4 +83,3 @@ class WebcamCapture:
 
     def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
         self.close()
-
