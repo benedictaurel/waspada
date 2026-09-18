@@ -47,11 +47,3 @@ The detector uses MediaPipe's Tasks Face Landmarker API with the official model
 stored at `drowsiness_pipeline/models/face_landmarker.task`. A different model
 can be selected with `--model-path`. Eye landmarks are converted to pixel
 coordinates before EAR calculation to avoid aspect-ratio distortion.
-
-## Test
-
-The mathematical and temporal logic can be tested without a camera:
-
-```powershell
-python -m unittest discover -s tests -v
-```

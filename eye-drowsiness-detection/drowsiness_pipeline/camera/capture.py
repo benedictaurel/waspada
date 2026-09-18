@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
+from picamera2 import Picamera2
 
 
 @dataclass(frozen=True)
@@ -26,8 +27,6 @@ class WebcamCapture:
             return self
 
         try:
-            from picamera2 import Picamera2
-
             picam2 = Picamera2()
 
             camera_config = picam2.create_video_configuration(

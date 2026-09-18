@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import math
 import time
 from collections import deque
 from collections.abc import Sequence
 
 from drowsiness_pipeline.utils.wheel_vibration import vibrate_sine
+from drowsiness_pipeline.utils.mqtt_publisher import MqttPublisher
 from drowsiness_pipeline.camera import CameraConfig, WebcamCapture
 from drowsiness_pipeline.core import FaceLandmarkDetector, average_ear
 from drowsiness_pipeline.logic import DrowsinessMonitor, DrowsinessStatus
@@ -66,6 +68,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help=argparse.SUPPRESS,
     )
+    parser.add_argument("--mqtt", action="store_true", help="publish status to the dashboard")
+    parser.add_argument("--mqtt-host", default="broker.hivemq.com")
+    parser.add_argument("--mqtt-port", type=int, default=8883, help="MQTT TLS port")
+    parser.add_argument("--mqtt-latitude", type=float, help="device latitude")
+    parser.add_argument("--mqtt-longitude", type=float, help="device longitude")
+    parser.add_argument("--mqtt-interval", type=float, default=5.0, help="seconds between status messages")
     return parser
 
 
@@ -79,6 +87,15 @@ def _validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) ->
         parser.error("--log-interval must be greater than 0")
     if args.max_frames is not None and args.max_frames < 1:
         parser.error("--max-frames must be at least 1")
+    if args.mqtt:
+        if args.mqtt_latitude is None or not math.isfinite(args.mqtt_latitude) or not -90 <= args.mqtt_latitude <= 90:
+            parser.error("--mqtt-latitude must be between -90 and 90")
+        if args.mqtt_longitude is None or not math.isfinite(args.mqtt_longitude) or not -180 <= args.mqtt_longitude <= 180:
+            parser.error("--mqtt-longitude must be between -180 and 180")
+        if not 1 <= args.mqtt_port <= 65535:
+            parser.error("--mqtt-port must be between 1 and 65535")
+        if not math.isfinite(args.mqtt_interval) or args.mqtt_interval <= 0:
+            parser.error("--mqtt-interval must be greater than zero")
 
 
 def _sound_alert() -> None:
@@ -105,8 +122,19 @@ def run(args: argparse.Namespace) -> int:
     eyes = None
     frames_seen = 0
     last_log_time = time.perf_counter()
+    publisher = None
+    last_publish_time = 0.0
+    last_published_status = None
 
     try:
+        if args.mqtt:
+            publisher = MqttPublisher(
+                latitude=args.mqtt_latitude,
+                longitude=args.mqtt_longitude,
+                host=args.mqtt_host,
+                port=args.mqtt_port,
+            )
+            print(f"[MQTT] Publishing as {publisher.raspi_id} to {publisher.topic}", flush=True)
         with WebcamCapture(camera_config) as camera, FaceLandmarkDetector(
             model_path=args.model_path
         ) as detector:
@@ -148,6 +176,18 @@ def run(args: argparse.Namespace) -> int:
                                 f"[Wheel vibration error] {exc}",
                                 flush=True,
                             )
+                    if publisher is not None:
+                        publish_now = time.perf_counter()
+                        if (
+                            status.alert_active != last_published_status
+                            or publish_now - last_publish_time >= args.mqtt_interval
+                        ):
+                            try:
+                                publisher.publish(status.alert_active)
+                                last_publish_time = publish_now
+                                last_published_status = status.alert_active
+                            except Exception as exc:
+                                print(f"[MQTT publish error] {exc}", flush=True)
                 else:
                     # Eye contours belong to the last processed frame and should
                     # not be drawn at stale coordinates on a newer frame.
@@ -170,6 +210,8 @@ def run(args: argparse.Namespace) -> int:
     except KeyboardInterrupt:
         pass
     finally:
+        if publisher is not None:
+            publisher.close()
         if not args.no_display:
             cv2.destroyAllWindows()
 
