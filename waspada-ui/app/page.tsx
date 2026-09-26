@@ -6,6 +6,10 @@ import { getSupabase } from "@/lib/supabase";
 import { subscribeToDriverLogs, type MqttConnectionState } from "@/lib/mqttService";
 import { formatDuration, serviceDate } from "@/lib/serviceTime";
 import type { Driver, DriverLog } from "@/lib/types";
+import DriverMap from "@/components/driver-map";
+import { FleetInsights } from "@/components/fleet-insights";
+import { Sidebar } from "@/components/sidebar";
+import { Icon } from "@/components/icon";
 
 const LIVE_LIMIT = 100;
 const HISTORY_PAGE_SIZE = 25;
@@ -39,9 +43,9 @@ function relativeTime(value: string): string {
   return String(Math.floor(seconds / 3600)) + "h ago";
 }
 
-function StatusPill({ log, now }: { log?: DriverLog; now: number }) {
+function StatusPill({ log, now, connected }: { log?: DriverLog; now: number; connected: boolean }) {
   if (!log) return <span className="status-pill status-idle"><span className="status-dot" /> Awaiting signal</span>;
-  if (now - Date.parse(log.receivedAt) > 120000) {
+  if (!connected || now - Date.parse(log.receivedAt) > 120000) {
     return <span className="status-pill status-idle"><span className="status-dot" /> Signal lost</span>;
   }
   return log.drowsy
@@ -52,6 +56,8 @@ function StatusPill({ log, now }: { log?: DriverLog; now: number }) {
 export default function Dashboard() {
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [liveLogs, setLiveLogs] = useState<DriverLog[]>([]);
+  const [latestById, setLatestById] = useState<Map<string, DriverLog>>(new Map());
+  const [storedLocations, setStoredLocations] = useState<Record<string, DriverLog>>({});
   const [connection, setConnection] = useState<MqttConnectionState>("connecting");
   const [mqttError, setMqttError] = useState("");
   const [loadError, setLoadError] = useState("");
@@ -59,6 +65,7 @@ export default function Dashboard() {
   const [dailyTotals, setDailyTotals] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<"all" | "live" | "alerts">("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [clock, setClock] = useState(() => Date.now());
   const [history, setHistory] = useState<StoredLog[]>([]);
@@ -67,6 +74,7 @@ export default function Dashboard() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
   const historyRequest = useRef(0);
+  const dialogRef = useRef<HTMLElement>(null);
   const configured = Boolean(getSupabase());
 
   const loadDrivers = useCallback(async () => {
@@ -107,19 +115,42 @@ export default function Dashboard() {
     return () => window.clearInterval(timer);
   }, [loadDailyTotals]);
   useEffect(() => subscribeToDriverLogs(
-    (log) => setLiveLogs((current) => [log, ...current].slice(0, LIVE_LIMIT)),
+    (log) => {
+      setLiveLogs((current) => current.some((item) => item.raspiUniqueId === log.raspiUniqueId && item.timestamp === log.timestamp) ? current : [log, ...current].slice(0, LIVE_LIMIT));
+      setLatestById((current) => {
+        const previous = current.get(log.raspiUniqueId);
+        if (previous && Date.parse(previous.timestamp) >= Date.parse(log.timestamp)) return current;
+        return new Map(current).set(log.raspiUniqueId, log);
+      });
+    },
     (state, error) => { setConnection(state); setMqttError(error || ""); },
   ), []);
 
-  const latestById = useMemo(() => {
-    const latest = new Map<string, DriverLog>();
-    for (const log of liveLogs) if (!latest.has(log.raspiUniqueId)) latest.set(log.raspiUniqueId, log);
-    return latest;
-  }, [liveLogs]);
+  useEffect(() => {
+    const supabase = getSupabase();
+    if (!supabase || !drivers.length) return;
+    let cancelled = false;
+    // One indexed latest-row lookup per driver: busy devices cannot hide others.
+    void Promise.all(drivers.map(async (driver) => {
+      const { data } = await supabase.from("driver_logs").select("raspi_unique_id,latitude,longitude,drowsy,device_timestamp,received_at").eq("raspi_unique_id", driver.raspi_unique_id).order("id", { ascending: false }).limit(1).maybeSingle();
+      if (!data) return null;
+      return [driver.raspi_unique_id, { raspiUniqueId: data.raspi_unique_id, latitude: data.latitude, longitude: data.longitude, drowsy: data.drowsy, timestamp: data.device_timestamp, receivedAt: data.received_at }] as const;
+    })).then((rows) => { if (!cancelled) setStoredLocations(Object.fromEntries(rows.filter((row) => row !== null))); });
+    return () => { cancelled = true; };
+  }, [drivers]);
+
+  const isLive = (log?: DriverLog) => Boolean(log && connection === "connected" && clock - Date.parse(log.receivedAt) <= 120000);
+  const activeCount = drivers.filter((driver) => isLive(latestById.get(driver.raspi_unique_id))).length;
+  const alertCount = drivers.filter((driver) => { const log = latestById.get(driver.raspi_unique_id); return isLive(log) && log?.drowsy; }).length;
+  const totalSeconds = drivers.reduce((total, driver) => total + (dailyTotals[driver.raspi_unique_id] || 0), 0);
   const filtered = useMemo(() => drivers.filter((driver) =>
     (driver.name + " " + driver.plate_number + " " + driver.raspi_unique_id)
       .toLowerCase().includes(search.toLowerCase().trim()),
-  ), [drivers, search]);
+  ).filter((driver) => {
+    const log = latestById.get(driver.raspi_unique_id);
+    const live = Boolean(log && connection === "connected" && clock - Date.parse(log.receivedAt) <= 120000);
+    return filter === "all" || (live && (filter !== "alerts" || log?.drowsy));
+  }), [drivers, search, filter, latestById, connection, clock]);
   const selected = drivers.find((driver) => driver.driver_id === selectedId) || null;
   const selectedSerial = selected?.raspi_unique_id || null;
   const selectedLog = selectedSerial ? latestById.get(selectedSerial) : undefined;
@@ -160,11 +191,22 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!selectedId) return;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    dialogRef.current?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setSelectedId(null);
+      if (event.key === "Tab") {
+        const elements = dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input, summary, [tabindex="0"]');
+        if (!elements?.length) return;
+        const first = elements[0], last = elements[elements.length - 1];
+        if (event.shiftKey && (document.activeElement === first || document.activeElement === dialogRef.current)) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      }
     };
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    return () => { window.removeEventListener("keydown", onKeyDown); document.body.style.overflow = previousOverflow; previousFocus?.focus(); };
   }, [selectedId]);
 
   const displayedHistory = useMemo(() => {
@@ -205,28 +247,24 @@ export default function Dashboard() {
     return [...currentLive, ...stored].sort((a, b) => Date.parse(b.receivedAt) - Date.parse(a.receivedAt));
   }, [selectedSerial, liveLogs, history]);
 
-  const latestLocation = selectedLog ||
-    (history[0]?.raspi_unique_id === selectedSerial ? history[0] : undefined);
+  const storedLocation = history[0]?.raspi_unique_id === selectedSerial
+    ? { ...history[0], receivedAt: history[0].received_at, timestamp: history[0].device_timestamp }
+    : selectedSerial ? storedLocations[selectedSerial] : undefined;
+  const latestLocation = selectedLog && (!storedLocation || Date.parse(selectedLog.timestamp) >= Date.parse(storedLocation.timestamp)) ? selectedLog : storedLocation;
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
-        <Link href="/" className="brand"><span className="brand-mark">W</span><span>WASPADA</span></Link>
-        <div className="side-label">WORKSPACE</div>
-        <nav className="side-nav" aria-label="Main navigation">
-          <Link className="nav-item active" href="/"><span>▦</span> Overview</Link>
-          <Link className="nav-item" href="/add-driver"><span>＋</span> Add driver</Link>
-        </nav>
-      </aside>
+      <Sidebar />
 
       <main className="main-content">
         <header className="topbar">
-          <div className="breadcrumb">Operations <span>/</span> Overview</div>
+          <div className="breadcrumb">Workspace <span>/</span> <strong>Overview</strong></div>
+          <div className="topbar-right"><span className={"connection " + connection} role="status"><span className="status-dot" />{connection === "connected" ? "Telemetry connected" : connection === "connecting" ? "Connecting telemetry" : "Telemetry offline"}</span><span className="avatar">OP</span></div>
         </header>
         <div className="page-content">
           <div className="page-heading">
-            <div><p className="eyebrow">LIVE OPERATIONS CENTER</p><h1>Driver overview</h1><p className="subheading">Monitor your registered drivers activity</p></div>
-            <Link href="/add-driver" className="primary-button"><span>＋</span> Add new driver</Link>
+            <div><p className="eyebrow"><span className="eyebrow-line" /> FLEET OPERATIONS</p><h1>Every driver. In sight.</h1><p className="subheading">A clearer view of your fleet, and the people behind the wheel.</p></div>
+            <Link href="/add-driver" className="primary-button"><Icon name="plus" size={17} /> Add driver</Link>
           </div>
 
           {!configured && <div className="notice">Supabase is not configured. Fill in <code>waspada-ui/.env.local</code>, then restart the app.</div>}
@@ -234,17 +272,35 @@ export default function Dashboard() {
           {mqttError && <div className="notice error">MQTT: {mqttError}</div>}
           {serviceError && <div className="notice error">Could not load today’s driving time: {serviceError}</div>}
 
-          <section className="overview-row" aria-label="Fleet overview">
-            <div className="metric-card total-drivers-card">
-              <div className="metric-icon blue">▦</div>
-              <span>Total drivers</span>
-              <strong>{drivers.length}</strong>
-              <small>Registered device units</small>
-            </div>
+          <section className="metrics" aria-label="Fleet overview">
+            <div className="metric-card"><div className="metric-heading"><span>Total drivers</span><Icon name="users" /></div><strong>{loading ? "—" : drivers.length.toString().padStart(2, "0")}</strong><small>Registered in your fleet</small></div>
+            <div className="metric-card"><div className="metric-heading"><span>Reporting live</span><Icon name="pulse" /></div><strong>{activeCount.toString().padStart(2, "0")}<span className="metric-unit"> / {drivers.length}</span></strong><small><span className="status-dot green-dot" /> Devices with a recent signal</small></div>
+            <div className={"metric-card " + (alertCount ? "alert-metric" : "")}><div className="metric-heading"><span>Needs attention</span><Icon name="alert" /></div><strong>{alertCount.toString().padStart(2, "0")}</strong><small>{alertCount ? "Live drowsiness alerts" : "No live drowsiness alerts"}</small></div>
+            <div className="metric-card"><div className="metric-heading"><span>Driving today</span><Icon name="clock" /></div><strong className="duration-metric">{serviceError ? "—" : formatDuration(totalSeconds)}</strong><small>Across all registered drivers</small></div>
+          </section>
+          <FleetInsights drivers={drivers} safe={activeCount - alertCount} alerts={alertCount} dailyTotals={serviceError ? {} : dailyTotals} />
+          <div className="operations-grid">
+          <section className="driver-section">
+            <div className="section-heading"><div><p className="panel-kicker">YOUR PEOPLE</p><h2>Driver roster <span className="count-chip">{drivers.length}</span></h2></div><button className="text-button" onClick={() => void loadDrivers()} disabled={loading}><Icon name="refresh" size={15} /> Refresh</button></div>
+            <div className="roster-toolbar"><div className="filter-tabs" aria-label="Filter drivers">{([['all', 'All drivers'], ['live', 'Live'], ['alerts', 'Alerts']] as const).map(([value, label]) => <button key={value} onClick={() => setFilter(value)} aria-pressed={filter === value} className={filter === value ? "selected" : ""}>{label}</button>)}</div><label className="search-box"><Icon name="search" size={16} /><input aria-label="Search drivers" type="search" placeholder="Find a driver…" value={search} onChange={(event) => setSearch(event.target.value)} /></label></div>
+            {loading && <div className="empty-state">Loading your fleet…</div>}
+            {!loading && filtered.length === 0 && <div className="empty-state"><Icon name="users" size={30} /><strong>{search || filter !== "all" ? "No drivers in this view" : "Your fleet starts here"}</strong><p>{search || filter !== "all" ? "Try a different search or filter." : "Add your first driver to bring their journey into view."}</p>{!search && filter === "all" && <Link href="/add-driver" className="secondary-button">Add first driver <Icon name="plus" size={15} /></Link>}</div>}
+            <div className="driver-grid">{filtered.map((driver) => {
+              const log = latestById.get(driver.raspi_unique_id);
+              const stored = storedLocations[driver.raspi_unique_id];
+              const location = log && (!stored || Date.parse(log.timestamp) >= Date.parse(stored.timestamp)) ? log : stored;
+              return <article className="driver-card" key={driver.driver_id}>
+                <button className="driver-card-profile" onClick={() => setSelectedId(driver.driver_id)} aria-label={`View ${driver.name} details`}><span className="driver-avatar">{driver.name.split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase()}</span><span className="driver-identity"><strong>{driver.name}</strong><span>{driver.plate_number}</span></span><Icon name="arrow" size={18} /></button>
+                <div className="driver-card-status"><StatusPill log={log} now={clock} connected={connection === "connected"} /><span><Icon name="clock" size={12} />{formatDuration(dailyTotals[driver.raspi_unique_id] || 0)}</span></div>
+                <DriverMap location={location} name={driver.name} live={isLive(log) && location === log} drowsy={log?.drowsy} compact />
+                <div className="driver-card-footer"><span>{location ? `${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}` : "No coordinates received"}</span><button onClick={() => setSelectedId(driver.driver_id)} aria-label={`Track ${driver.name}`}>Track driver <Icon name="arrow" size={13} /></button></div>
+              </article>;
+            })}</div>
+          </section>
             <section className="panel activity-panel">
               <div className="panel-header">
-                <div><h2>Live activity</h2><p>Messages from all registered device units</p></div>
-                <span className="live-label"><span className="status-dot" /> LIVE</span>
+                <div><p className="panel-kicker">AS IT HAPPENS</p><h2>Activity stream</h2></div>
+                <span className={"live-label " + (connection !== "connected" ? "offline" : "")}><span className="status-dot" />{connection === "connected" ? "LIVE" : "OFFLINE"}</span>
               </div>
               <div className="activity-list">
                 {matchedLogs.map((log, index) => {
@@ -252,70 +308,46 @@ export default function Dashboard() {
                   return (
                     <button className="activity-item" key={log.raspiUniqueId + "-" + log.receivedAt + "-" + index}
                       onClick={() => { if (driver) setSelectedId(driver.driver_id); }} type="button">
-                      <span className={"activity-symbol " + (log.drowsy ? "danger" : "safe")}>{log.drowsy ? "!" : "✓"}</span>
+                      <span className={"activity-symbol " + (log.drowsy ? "danger" : "safe")}><Icon name={log.drowsy ? "alert" : "check"} size={16} /></span>
                       <span className="activity-copy">
-                        <strong>{log.drowsy ? "Drowsiness detected" : "Driver reporting normally"}</strong>
+                        <strong>{log.drowsy ? "Drowsiness detected" : "Driver is alert"}</strong>
                         <span>{driver?.name || log.raspiUniqueId} · {driver?.plate_number || "Unknown vehicle"}</span>
                         <small>{relativeTime(log.receivedAt)} · {log.latitude.toFixed(4)}, {log.longitude.toFixed(4)}</small>
                       </span>
                     </button>
                   );
                 })}
-                {matchedLogs.length === 0 && <div className="activity-empty"><span>◉</span><strong>Waiting for telemetry</strong><p>Messages from registered Pi units will appear here.</p></div>}
+                {matchedLogs.length === 0 && <div className="activity-empty"><span className="signal-orbit"><Icon name="pulse" size={25} /></span><strong>Listening for your fleet</strong><p>New signals and driver alerts<br />will appear here as they arrive.</p></div>}
               </div>
+              <div className="activity-footer"><span className="status-dot" /> Latest {LIVE_LIMIT} messages · This session</div>
             </section>
-          </section>
-
-          <section className="driver-section">
-            <div className="section-heading">
-              <div><h2>Drivers</h2><p>Select a driver to view their details and MQTT log history.</p></div>
-              <div className="section-tools">
-                <label className="search-box"><span>⌕</span><input type="search" placeholder="Search name, plate, or Pi ID" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
-                <button className="text-button" onClick={() => void loadDrivers()} disabled={loading}>↻ Refresh</button>
-              </div>
-            </div>
-            {loading && <div className="empty-state">Loading drivers…</div>}
-            {!loading && filtered.length === 0 && <div className="empty-state">
-              <span>◌</span><strong>{search ? "No matches found" : "No drivers yet"}</strong>
-              <p>{search ? "Try another name, plate, or Pi ID." : "Add a driver to begin monitoring your fleet."}</p>
-              {!search && <Link href="/add-driver" className="secondary-button">Add first driver</Link>}
-            </div>}
-            <div className="driver-grid">
-              {filtered.map((driver) => {
-                const log = latestById.get(driver.raspi_unique_id);
-                return (
-                  <button className="driver-card" type="button" key={driver.driver_id} onClick={() => setSelectedId(driver.driver_id)}>
-                    <span className="driver-card-top"><span className="driver-avatar">{driver.name.slice(0, 1).toUpperCase()}</span><span className="driver-card-arrow">↗</span></span>
-                    <strong className="driver-card-name">{driver.name}</strong>
-                    <span className="driver-card-plate">{driver.plate_number}</span>
-                    <span className="driver-card-footer"><StatusPill log={log} now={clock} /><span>{formatDuration(dailyTotals[driver.raspi_unique_id] || 0)} today</span></span>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
+          </div>
+          <footer className="page-footer"><span>WASPADA <span className="footer-divider">/</span> AWARENESS IN MOTION</span><span>Built around the people on the road.</span></footer>
         </div>
       </main>
 
       {selected && <div className="modal-backdrop" onMouseDown={() => setSelectedId(null)}>
-        <section className="detail-modal driver-detail-modal" role="dialog" aria-modal="true" aria-label={selected.name + " details"} onMouseDown={(event) => event.stopPropagation()}>
-          <button className="modal-close" onClick={() => setSelectedId(null)} aria-label="Close details">×</button>
+        <section ref={dialogRef} tabIndex={-1} className="detail-modal driver-detail-modal" role="dialog" aria-modal="true" aria-label={selected.name + " details"} onMouseDown={(event) => event.stopPropagation()}>
+          <button className="modal-close" onClick={() => setSelectedId(null)} aria-label="Close details"><Icon name="close" /></button>
           <p className="eyebrow">DRIVER PROFILE</p>
           <h2>{selected.name}</h2>
           <p className="modal-subtitle">{selected.plate_number} · Device ID: {selected.raspi_unique_id}</p>
-          <StatusPill log={selectedLog} now={clock} />
+          <StatusPill log={selectedLog} now={clock} connected={connection === "connected"} />
           <div className="detail-grid">
             <div><span>Mobile number</span><strong>{selected.mobile_number}</strong></div>
             <div><span>Emergency contact</span><strong>{selected.emergency_contact}</strong></div>
             <div><span>Driving today</span><strong>{formatDuration(dailyTotals[selected.raspi_unique_id] || 0)}</strong></div>
           </div>
+          <div className="detail-map-heading"><h3>Driver location</h3><span>{latestLocation ? `Received ${relativeTime(latestLocation.receivedAt)}` : "Awaiting first signal"}</span></div>
+          <DriverMap key={selected.driver_id} location={latestLocation} name={selected.name} live={isLive(selectedLog) && latestLocation === selectedLog} drowsy={selectedLog?.drowsy} />
           {latestLocation && <div className="location-box">
-            <span>LAST KNOWN LOCATION</span>
+            <span>REPORTED COORDINATES</span>
             <strong>{latestLocation.latitude.toFixed(5)}, {latestLocation.longitude.toFixed(5)}</strong>
             <a href={"https://www.openstreetmap.org/?mlat=" + latestLocation.latitude + "&mlon=" + latestLocation.longitude + "#map=15/" + latestLocation.latitude + "/" + latestLocation.longitude}
               target="_blank" rel="noopener noreferrer">Open map ↗</a>
           </div>}
           <div className="history-header">
+            <h3>Signal history</h3>
             <span>{history.length} stored loaded</span>
           </div>
           <div className="history-list">
