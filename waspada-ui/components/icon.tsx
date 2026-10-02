@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 
 const paths = {
+  steering: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0 M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0 M3 10h6 M15 10h6 M12 15v6",
   grid: "M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z",
   plus: "M12 5v14 M5 12h14",
   arrow: "M7 17 17 7 M7 7h10v10",

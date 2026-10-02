@@ -1,5 +1,13 @@
 # Waspada dashboard
 
+## Driving simulator
+
+Open `/simulator` for a fullscreen cockpit, keyboard controls, configurable
+wheel/pedal inputs, and a 3:4 dashboard credits screen. It is a standalone driving
+experience without detector integrations. Edit `lib/simulator/config.ts` to set
+the scene. See the [simulator guide](app/simulator/README.md) for controls and
+FANTECH R1V2 calibration.
+
 Driver registration stores identity and contact details. Driving time is calculated from consecutive Raspberry Pi MQTT heartbeats, which arrive every five seconds by default. A gap longer than 15 seconds is treated as a stop; missing time is not counted. The total resets at midnight in NEXT_PUBLIC_OPERATIONS_TIME_ZONE (default: Asia/Jakarta). Running the detector is treated as driving; the current telemetry has no ignition or vehicle-motion signal.
 
 ## Setup

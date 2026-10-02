@@ -1,0 +1,67 @@
+/* The simulator owns the viewport; no dashboard chrome or page scrolling. */
+body:has(.sim-app) { overflow:hidden; }
+body:has(.sim-app) .glass-preference, body:has(.sim-app) .glass-environment { display:none; }
+.sim-app { position:fixed; inset:0; z-index:20; background:#203333; color:#e8eddf; font-family:"Segoe UI",sans-serif; color-scheme:dark; }
+.sim-app button,.sim-app select,.sim-app input { font:inherit; }
+.sim-app button:focus-visible,.sim-app input:focus-visible,.sim-app select:focus-visible { outline:2px solid #bad7a3; outline-offset:4px; }
+.sim-stage { position:relative; width:100%; height:100%; isolation:isolate; overflow:hidden; outline:none; }
+.sim-stage:fullscreen { width:100vw; height:100dvh; }
+.sim-world { position:absolute; inset:0; width:100%; height:100%; display:block; }
+
+.sim-view-divider { width:1px; height:10px; background:#f2f6e66b; margin:0 4px; }
+.sim-live-dot,.sim-idle-dot { display:inline-block; flex:none; width:5px; height:5px; border-radius:50%; background:#9ebd78; }.sim-idle-dot { background:#b5baa9; }
+
+.sim-mirror { position:absolute; z-index:3; top:58px; left:50%; transform:translateX(-50%); width:174px; height:49px; border:5px solid #263436; border-radius:8px 8px 14px 14px; background:transparent; box-shadow:0 3px 8px #16292942; overflow:hidden; }.sim-mirror:before { display:none; content:""; position:absolute; inset:0; background:linear-gradient(175deg,#b7cac6 46%,#79977e 47% 63%,#6a7572 64%); }.sim-mirror>div { position:absolute; width:48%; height:65%; bottom:0; left:25%; background:#626e6c; clip-path:polygon(40% 0,60% 0,100% 100%,0 100%); }.sim-mirror>span { position:absolute; bottom:3px; text-align:center; width:100%; color:#dce2d6; font-size:3px; letter-spacing:.4px; }
+.sim-pillar { position:absolute; z-index:2; top:0; bottom:21%; background:linear-gradient(90deg,#223135,#485250 55%,#253437); width:7.8%; box-shadow:4px 0 8px #24343455; }.sim-pillar-left { left:-4%; transform:rotate(-15deg); transform-origin:top; }.sim-pillar-right { right:-4%; transform:rotate(15deg); transform-origin:top; }
+.sim-hood { position:absolute; z-index:1; bottom:27%; left:3%; width:94%; height:12%; background:linear-gradient(#556b69,#2f4243); clip-path:polygon(14% 0,83% 0,100% 100%,0 100%); border-radius:40% 40% 0 0; }
+.sim-cockpit { position:absolute; z-index:3; bottom:0; left:-2%; width:104%; height:37%; background:linear-gradient(177deg,#455453 0,#303e3e 15%,#202c2f 17%,#253132 36%,#182426 100%); border-top:4px solid #67706a; border-radius:48% 30% 0 0 / 17% 16% 0 0; box-shadow:0 -7px 20px #1d303c35; }
+.sim-dash-seam { position:absolute; top:35%; left:0; right:0; height:2px; background:#6f786b66; box-shadow:0 2px 2px #101b1d; transform:rotate(-2deg); }
+.sim-instruments { position:absolute; left:13%; top:7%; display:flex; justify-content:space-around; align-items:center; width:36%; height:46%; border-radius:45% 45% 10% 10% / 30% 30% 10% 10%; background:linear-gradient(#0d191bf0,#122125); border:3px solid #253335; border-top:6px solid #162325; box-shadow:0 -5px 0 #50605a,0 5px 10px #101b1c88; color:#dbe6d8; padding:9px 13px; }
+.sim-speed { position:relative; display:grid; justify-items:center; flex:1; }.sim-speed>strong { font-size:clamp(25px,3.2vw,48px); font-weight:300; letter-spacing:-1px; line-height:1; font-variant-numeric:tabular-nums; }.sim-speed>small { font-size:7px; letter-spacing:1px; color:#839b92; margin-top:4px; }.sim-speed>div { white-space:nowrap; font-size:5px; margin-top:8px; letter-spacing:1px; color:#7a9b8a; }.sim-speed>div span { padding:0 5px; }.sim-gear { color:#b9d4a5; font-size:9px; position:absolute; right:5%; top:0; }
+.sim-gauge { width:25%; text-align:center; position:relative; height:65px; display:flex; flex-direction:column; align-items:center; }.sim-gauge>span { font-size:5px; letter-spacing:1.4px; color:#a3b4a6; }.sim-gauge>b { font-weight:300; font-size:16px; margin-top:14px; }.sim-gauge>b small { font-size:6px; }.sim-gauge-arc { width:50px; height:50px; border:2px solid #8caa90; border-bottom-color:transparent; border-radius:50%; position:absolute; top:12px; }.sim-gauge>small { font-size:4px; margin-top:6px; letter-spacing:.5px; color:#8c9f91; }.sim-limit { border:2px solid #ae7963; border-radius:50%; width:30px; height:30px; display:grid; place-items:center; font-size:14px; margin-top:8px; }
+.sim-steering { position:absolute; width:min(31%,40vh); aspect-ratio:1; left:17%; top:32%; z-index:4; filter:drop-shadow(0 9px 9px #0005); will-change:transform; }.sim-steering svg { width:100%; height:100%; }
+.sim-vent { position:absolute; background:repeating-linear-gradient(0deg,#102024 0 3px,#43524c 4px 5px); border:4px solid #3c4b48; border-radius:6px; box-shadow:0 2px 3px #071416; }.sim-vent-left { left:5%; top:29%; width:8%; height:17%; transform:rotate(5deg); }.sim-vent-right { right:8%; top:28%; width:14%; height:15%; transform:rotate(-3deg); }
+.sim-center-console { position:absolute; width:13%; left:54%; top:8%; border-radius:8px 8px 12px 12px; padding:7px; background:linear-gradient(135deg,#0e1d21,#354743); border:2px solid #52625c; box-shadow:4px 7px 12px #07111370; transform:rotate(-3deg); }.sim-credits-screen { width:100%; aspect-ratio:3 / 4; background:#29473e; border:2px solid #0b191a; border-radius:3px; overflow:hidden; }.sim-credits-screen img { display:block; width:100%; height:100%; object-fit:contain; }.sim-console-knobs { display:flex; align-items:center; justify-content:space-between; padding:8px 1px 2px; }.sim-console-knobs i { width:12px; height:12px; border:2px solid #89928b; border-radius:50%; background:#1a2627; }.sim-console-knobs span { font-size:4px; letter-spacing:1px; color:#899a8d; }.sim-passenger-brand { position:absolute; right:11%; top:63%; font-size:10px; letter-spacing:2px; color:#8f9c8a88; transform:rotate(-3deg); }
+.sim-paused { position:absolute; z-index:5; left:50%; top:42%; transform:translate(-50%,-50%); display:flex; flex-direction:column; align-items:center; gap:12px; padding:20px 26px; background:#203c3594;  border:1px solid #f3f6da35; border-radius:13px; color:#e9eedc; box-shadow:0 8px 40px #1c31282b; white-space:nowrap; }.sim-paused>span { font-size:7px; letter-spacing:1.8px; color:#d6e0c9; }.sim-paused button { border:1px solid #ffffff50; background:#eff3e0; color:#365644; font-size:13px; padding:11px 30px; border-radius:6px; }.sim-paused button:hover { background:white; }.sim-paused>small { font-size:8px; color:#c4d0c2; }
+.sim-loading { position:absolute; inset:0; z-index:8; display:grid; place-content:center; text-align:center; padding:30px; background:#223b35ed; color:#e5ead7; font-size:15px; }
+
+.sim-view-bottom { position:absolute; z-index:6; left:23px; right:18px; bottom:15px; display:flex; align-items:center; justify-content:space-between; color:#a8b2a5; font-size:6px; letter-spacing:1.4px; }.sim-view-bottom b { color:#e4e7d4; margin-left:8px; }.sim-view-bottom button { font-size:23px; color:#c2cdbd; background:#1c2d2c88; border:1px solid #d6dfc52b; width:31px; height:31px; border-radius:5px; }
+
+.sim-dialog { color:#32493b; background:#f5f7ee; padding:27px; width:min(680px,94vw); max-height:90vh; overflow:auto; border:1px solid #d5dfc7; border-radius:16px; box-shadow:0 24px 100px #16271d55; }.sim-dialog::backdrop { background:#182b2377; backdrop-filter:blur(5px); }.sim-dialog-head { display:flex; align-items:center; justify-content:space-between; gap:20px; }.sim-dialog-head h2 { font-size:25px; font-weight:450; letter-spacing:-.9px; }.sim-dialog-head>button { background:none; border:0; }.sim-dialog>p { font-size:11px; line-height:1.7; color:#819070; margin:17px 0; }.sim-dialog button { background:#e9eedf; border:1px solid #cfdac1; border-radius:6px; padding:8px 10px; font-size:10px; color:#5d774b; }.sim-field { display:flex; flex-direction:column; gap:7px; margin:12px 0; font-size:10px; color:#728662; }.sim-field>input:not([type="range"]),.sim-field>select { background:#fdfef8; border:1px solid #d5dfc8; border-radius:5px; padding:8px; color:#49623b; min-width:0; width:100%; }.sim-field input[type="range"] { accent-color:#5f8556; }.sim-check { display:flex; align-items:center; gap:8px; font-size:11px; }.sim-check input { accent-color:#5f8556; }.sim-config-grid { display:grid; grid-template-columns:1fr 1fr; gap:0 16px; }.sim-config-actions { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:9px 0 20px; }.sim-pedal-grid { display:grid; grid-template-columns:1fr 1fr; gap:15px; }.sim-pedal-grid fieldset { min-width:0; padding:12px; border:1px solid #d7dfcd; border-radius:7px; }.sim-pedal-grid legend { font-size:11px; padding:0 6px; }.sim-pedal-grid small { display:block; margin-top:9px; font-size:9px; color:#879974; }.sim-pedal-capture { display:flex; gap:7px; }.sim-pedal-capture button { flex:1; font-size:9px; }.sim-raw { margin-top:20px; border-radius:7px; padding:12px; background:#e9efdf; }.sim-raw>strong { display:block; font-size:10px; font-weight:500; margin-bottom:8px; }.sim-raw strong small { font-weight:400; color:#8b9a7c; margin-left:8px; }.sim-raw>div { display:flex; flex-wrap:wrap; gap:5px; margin:4px 0; }.sim-raw>div>span { display:inline-block; padding:4px 6px; background:#f7f9ee; font-size:9px; border-radius:3px; color:#7c8e68; font-variant-numeric:tabular-nums; }.sim-raw span b { color:#4b663b; font-weight:500; }.sim-raw>div>span.pressed { background:#b9d3a0; }.sim-raw p { font-size:11px; line-height:1.6; color:#7c8e68; }.sim-dialog-footer { display:flex; justify-content:space-between; align-items:center; border-top:1px solid #dce3d1; padding-top:18px; }.sim-warning { font-size:10px; color:#a05b39; margin:8px 0 0; }
+
+/* In-game menus only. Hardware calibration remains inside native fullscreen. */
+.sim-paused { white-space:normal; width:min(400px,90%); top:40%; padding:23px; background:#1a302eea; }
+.sim-paused .sim-start { width:100%; padding:13px; font-size:15px; }
+.sim-menu-actions { display:flex; flex-wrap:wrap; justify-content:center; gap:7px; }
+.sim-menu-actions button { padding:7px 8px; background:#3b5049; color:#e5ebda; font-size:10px; }
+.sim-key-help { font-size:10px; line-height:1.9; text-align:center; color:#b7c6b5; }
+.sim-view-bottom { pointer-events:none; }
+.sim-view-bottom button { pointer-events:auto; }
+.sim-view-bottom button:first-child { width:auto; padding:0 10px; font-size:10px; letter-spacing:.6px; }
+.sim-speed .sim-gear { background:none; border:0; padding:2px 4px; color:#b9d4a5; font-size:12px; }
+.sim-credits-screen { border:0; box-shadow:0 0 0 2px #0b191a; }
+.sim-notice { position:absolute; top:20px; left:50%; transform:translateX(-50%); z-index:10; width:max-content; max-width:85%; display:flex; align-items:center; gap:14px; padding:12px 16px; border-radius:8px; background:#233a32ec; color:#e0e8d4; font-size:12px; }
+.sim-notice button { border:0; background:none; color:inherit; }
+.sim-dialog { color-scheme:light; }
+.sim-kicker { display:block; font-size:9px; letter-spacing:1.6px; margin-bottom:10px; color:#7e8b71; }
+.sim-primary { color:#f3f5e9!important; background:#365e4d!important; }
+@media(max-aspect-ratio:1/1) {
+  .sim-cockpit { height:30%; }
+  .sim-instruments { left:9%; width:47%; }
+  .sim-steering { width:48%; left:8%; }
+  .sim-center-console { width:21%; left:61%; }
+  .sim-vent-left { left:2%; width:7%; }
+  .sim-vent-right { right:3%; width:10%; }
+  .sim-passenger-brand { display:none; }
+  .sim-gauge { transform:scale(.7); }
+  .sim-mirror { width:140px; }
+  .sim-pedal-grid { grid-template-columns:1fr; }
+  .sim-config-actions { flex-wrap:wrap; }
+}
+@media(max-height:550px) {
+  .sim-paused { top:45%; padding:13px; gap:8px; }
+  .sim-key-help { font-size:9px; line-height:1.4; }
+  .sim-instruments { top:4%; height:55%; }
+  .sim-center-console { width:9%; top:4%; }
+  .sim-steering { width:26%; top:48%; }
+}
