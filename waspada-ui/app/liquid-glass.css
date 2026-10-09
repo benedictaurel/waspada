@@ -288,3 +288,8 @@ body[data-theme="dark"] .alert-metric { background: #322524; }
 }
 @supports not (backdrop-filter: blur(1px)) { body[data-theme="light"] :is(.sidebar, .metric-card, .panel, .driver-card, .form-card, .detail-modal, .topbar) { background: #e5f0f8; } }
 @media (max-width: 720px) { .page-content { padding-bottom: 55px; } }
+
+body[data-theme="dark"] .account-menu > button { background: #213146; border-color: #34465c; }
+body[data-theme="dark"] .auth-tabs { background: #131e2d; border-color: #273547; }
+body[data-theme="dark"] .auth-tabs button.selected { background: #2c4057; border-color: #3b516a; }
+body[data-theme="dark"] .notice.success { background: #16382f; border-color: #2c5e50; color: #9dd9c6; }

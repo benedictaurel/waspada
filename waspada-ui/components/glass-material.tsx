@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 
 const SURFACES = ".sidebar, .metric-card, .panel, .driver-card, .form-card, .detail-modal, .topbar";
 type Theme = "light" | "dark";
@@ -8,6 +9,8 @@ type Theme = "light" | "dark";
 /** Light uses smooth glass; dark uses solid surfaces. Content is never filtered. */
 export function GlassMaterial() {
   const [theme, setTheme] = useState<Theme>("light");
+  const pathname = usePathname();
+  const loginIsDarkOnly = pathname === "/login";
 
   useEffect(() => {
     try {
@@ -17,10 +20,11 @@ export function GlassMaterial() {
   }, []);
 
   useEffect(() => {
-    document.body.dataset.theme = theme;
-    document.documentElement.style.colorScheme = theme;
-    document.body.dataset.glass = theme === "light" ? "on" : "off";
-    if (theme === "dark") return;
+    const activeTheme: Theme = loginIsDarkOnly ? "dark" : theme;
+    document.body.dataset.theme = activeTheme;
+    document.documentElement.style.colorScheme = activeTheme;
+    document.body.dataset.glass = activeTheme === "light" ? "on" : "off";
+    if (activeTheme === "dark") return;
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
     const finePointer = window.matchMedia("(pointer: fine)");
     const supportsRefraction = CSS.supports("backdrop-filter", 'url("#liquid-refraction")');
@@ -69,7 +73,9 @@ export function GlassMaterial() {
         for (const property of ["--glass-glint", "--glass-x", "--glass-y"]) node.style.removeProperty(property);
       }
     };
-  }, [theme]);
+  }, [loginIsDarkOnly, theme]);
+
+  if (loginIsDarkOnly) return null;
 
   return <>
     <svg className="glass-filter-definitions" aria-hidden="true" focusable="false"><defs>

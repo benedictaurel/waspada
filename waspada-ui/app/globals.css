@@ -33,3 +33,72 @@ h1, h2, h3, p { margin-top: 0; } h1 { margin-bottom: 0; font-size: clamp(29px, 3
 @media (max-width: 720px) { .app-shell { display: block; }.sidebar { position: static; width: 100%; height: auto; padding: 17px 20px; flex-direction: row; align-items: center; justify-content: space-between; border-right: 0; border-bottom: 1px solid white; }.brand { font-size: 23px; padding: 0; }.brand-mark { width: 31px; height: 35px; border-radius: 10px; }.brand small { font-size: 6px; letter-spacing: 1px; }.side-label, .sidebar-bottom { display: none; }.side-nav { display: flex; gap: 5px; }.nav-item { font-size: 10px; padding: 8px 10px; gap: 7px; min-height: 35px; border-radius: 9px; }.nav-item svg { width: 15px; height: 15px; }.nav-active-dot { display: none !important; }.topbar { height: 59px; margin-inline: 20px; }.topbar-right { gap: 12px; }.avatar { width: 28px; height: 28px; }.connection { font-size: 8px; }.breadcrumb { font-size: 10px; }.breadcrumb span { margin: 0 8px; }.page-content { padding: 28px 20px 20px; }.page-heading { gap: 14px; align-items: flex-start; }.page-heading .primary-button { align-self: flex-start; margin-top: 21px; padding: 10px 12px; }.subheading { font-size: 11px; line-height: 1.7; max-width: 310px; }.metrics { gap: 12px; }.metric-card { border-radius: 15px; padding: 17px; }.metric-card > strong { font-size: 31px; }.metric-card > .duration-metric { font-size: 27px; min-height: 37px; }.health-content { flex-direction: row; }.insights-grid { grid-template-columns: 1fr; }.chart-legend { width: auto; }.donut-wrap { width: 155px; height: 155px; }.health-content { min-height: 190px; }.driving-chart { min-height: 140px; }.driver-grid { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }.page-footer > span:last-child { display: none; }.form-grid { grid-template-columns: 1fr; }.form-card { padding: 22px; }.modal-backdrop { padding: 12px; }.detail-modal { padding: 26px 20px; border-radius: 20px; }.detail-grid { grid-template-columns: 1fr 1fr; }.driver-map:not(.compact) .map-follow { top: auto; bottom: 30px; }.detail-map-heading > span { font-size: 9px; } }
 @media (max-width: 420px) { .sidebar { padding-inline: 15px; }.brand { gap: 7px; font-size: 21px; }.nav-item { padding-inline: 7px; gap: 5px; }.nav-item svg { display: none; }.page-content { padding-inline: 15px; }.topbar { margin-inline: 15px; }.page-heading { flex-direction: column; }.page-heading .primary-button { margin-top: 0; }.metric-card { padding-inline: 13px; }.metric-card small { font-size: 8px; }.metric-heading { font-size: 10px; }.health-content { padding-inline: 12px; gap: 12px; }.donut-wrap { width: 125px; height: 125px; }.chart-legend > div { font-size: 9px; }.roster-toolbar { flex-wrap: wrap; }.search-box { width: 100%; }.location-box { padding-bottom: 36px; }.location-box a { top: auto; bottom: 12px; left: 14px; }.detail-map-heading { align-items: flex-start; flex-direction: column; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+
+/* Authentication and account controls */
+.auth-loading { min-height: 100vh; display: grid; place-content: center; justify-items: center; gap: 15px; color: var(--muted); font-size: 11px; letter-spacing: .5px; }
+.auth-loading .brand-mark { width: 45px; height: 50px; }
+.auth-pulse { color: inherit; font-size: 16px; font-weight: 700; }
+.account-menu { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.account-copy { display: grid; min-width: 0; max-width: 180px; }
+.account-copy strong, .account-copy span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-copy strong { color: var(--ink); font-size: 10px; font-weight: 600; }
+.account-copy span { color: var(--muted); margin-top: 2px; font-size: 8px; }
+.account-menu > button { padding: 6px 9px; border: 1px solid #ffffff80; border-radius: 8px; background: #ffffff30; color: var(--muted); font-size: 9px; }
+.account-menu > button:hover { background: #ffffff75; color: var(--ink); }
+
+.login-page { width: 100%; min-height: 100vh; display: grid; grid-template-columns: minmax(360px, 1.1fr) minmax(420px, .9fr); padding: 22px; position: relative; z-index: 1; }
+.login-story, .login-panel { min-height: calc(100vh - 44px); }
+.login-story { position: relative; display: flex; flex-direction: column; justify-content: center; padding: clamp(35px, 6vw, 76px); border: 0; border-radius: 0; background: transparent; color: #f4fbff; box-shadow: none; }
+.login-brand { position: relative; z-index: 1; display: flex; align-items: center; gap: 11px; width: max-content; font-size: 29px; font-weight: 650; letter-spacing: -1.2px; }
+.login-brand small { display: block; margin-top: 3px; color: #d8ebf5; font-size: 7px; font-weight: 600; letter-spacing: 1.65px; }
+.login-brand .brand-period { color: #a6d6e8; }
+.login-story > .eyebrow { margin-top: 64px; color: #d3eaf5; }
+.login-story > .eyebrow .eyebrow-line { background: #c8e5f1; }
+.login-story > h1 { color: white; font-size: clamp(42px, 5vw, 72px); font-weight: 450; line-height: 1.08; letter-spacing: -3.2px; }
+.login-story-description { max-width: 470px; margin: 24px 0 60px; padding-bottom: 0; color: #d5e9f3; font-size: 14px; line-height: 1.8; }
+.login-assurance { position: relative; z-index: 1; display: flex; align-items: center; gap: 12px; color: #d9edf7; font-size: 10px; }
+.login-assurance svg { padding: 8px; width: 38px; height: 38px; border: 1px solid #ffffff38; border-radius: 12px; background: #ffffff0d; }
+.login-assurance span { display: grid; gap: 3px; }
+.login-assurance strong { color: white; }
+.login-panel { display: grid; place-items: center; padding: clamp(35px, 6vw, 90px); }
+.login-card { width: min(100%, 410px); }
+.login-card > h2 { font-size: 35px; font-weight: 500; letter-spacing: -1.5px; }
+.login-intro { margin: 12px 0 28px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.auth-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; margin-bottom: 24px; border: 1px solid #ffffff85; border-radius: 12px; background: #ffffff24; }
+.auth-tabs button { padding: 9px; border: 1px solid transparent; border-radius: 9px; background: transparent; color: var(--muted); font-size: 10px; }
+.auth-tabs button.selected { border-color: #ffffffc2; background: #ffffff75; color: var(--ink); box-shadow: 0 3px 9px #1947610c; }
+.login-form { display: grid; gap: 18px; }
+.login-form .field { gap: 8px; }
+.login-form .field > span { font-weight: 500; }
+.login-form .field input { height: 47px; border-radius: 12px; font-size: 13px; }
+.login-form .notice { margin: 0; }
+.notice.success { border-color: #a7cdbd; background: #e9f6ef; color: #34705a; }
+.login-card .login-submit { width: 100%; min-height: 47px; justify-content: space-between; margin-top: 3px; padding-inline: 17px; border-radius: 12px; font-size: 11px; }
+.login-card .login-submit > span { font-size: 16px; }
+.login-footnote { margin: 18px 0 0; text-align: center; color: var(--muted); font-size: 9px; }
+
+@media (max-width: 900px) {
+  .login-page { grid-template-columns: minmax(0, 1fr); padding: 14px; }
+  .login-story { min-height: 330px; padding: 34px; }
+  .login-story > .eyebrow { margin-top: 45px; }
+  .login-story > h1 { font-size: clamp(36px, 8vw, 56px); }
+  .login-story-description { margin-top: 16px; padding-bottom: 20px; }
+  .login-assurance { display: none; }
+  .login-panel { min-height: auto; padding: 55px 24px 70px; }
+}
+@media (max-width: 720px) {
+  .account-copy { display: none; }
+  .account-menu { gap: 5px; }
+  .account-menu > button { padding-inline: 7px; }
+}
+@media (max-width: 500px) {
+  .login-page { padding: 0; }
+  .login-story { min-height: 280px; border-radius: 0 0 28px 28px; padding: 27px 23px; }
+  .login-brand { font-size: 24px; }
+  .login-brand .brand-mark { width: 33px; height: 38px; }
+  .login-story > .eyebrow { margin-top: 35px; }
+  .login-story > h1 { font-size: 36px; letter-spacing: -2px; }
+  .login-story-description { display: none; }
+  .login-panel { padding: 43px 22px 70px; }
+  .login-card > h2 { font-size: 29px; }
+}

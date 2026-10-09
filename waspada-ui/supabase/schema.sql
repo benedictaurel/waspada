@@ -1,6 +1,47 @@
 -- Re-run this script after upgrading an existing demo database.
+-- Supabase Auth keeps passwords and sessions in auth.users. This public profile
+-- contains only application-facing account data.
+create table if not exists public.profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  full_name text not null default '' check (length(full_name) <= 120),
+  created_at timestamptz not null default now()
+);
+alter table public.profiles enable row level security;
+revoke all on public.profiles from anon, authenticated;
+grant select, update on public.profiles to authenticated;
+drop policy if exists "users_read_own_profile" on public.profiles;
+drop policy if exists "users_update_own_profile" on public.profiles;
+create policy "users_read_own_profile" on public.profiles
+  for select to authenticated using (id = (select auth.uid()));
+create policy "users_update_own_profile" on public.profiles
+  for update to authenticated
+  using (id = (select auth.uid()))
+  with check (id = (select auth.uid()));
+
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+begin
+  insert into public.profiles (id, full_name)
+  values (new.id, left(coalesce(new.raw_user_meta_data->>'full_name', ''), 120))
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+revoke all on function public.handle_new_user() from public, anon, authenticated;
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
+insert into public.profiles (id, full_name)
+select id, left(coalesce(raw_user_meta_data->>'full_name', ''), 120)
+from auth.users
+on conflict (id) do nothing;
+
 create table if not exists public.drivers (
   driver_id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
   name text not null check (length(trim(name)) between 1 and 120),
   mobile_number text not null check (length(trim(mobile_number)) between 3 and 32),
   emergency_contact text not null check (length(trim(emergency_contact)) between 3 and 32),
@@ -8,13 +49,32 @@ create table if not exists public.drivers (
   raspi_unique_id text not null unique check (raspi_unique_id ~ '^[A-Za-z0-9_-]+$'),
   created_at timestamptz not null default now()
 );
+-- Existing demo databases need the ownership column added without destroying rows.
+-- Unassigned legacy rows stay hidden until an administrator assigns owner_id.
+alter table public.drivers
+  add column if not exists owner_id uuid references auth.users(id) on delete cascade;
+alter table public.drivers alter column owner_id set default auth.uid();
+create index if not exists drivers_owner_id_idx on public.drivers (owner_id);
 alter table public.drivers drop column if exists hours_of_service;
 alter table public.drivers enable row level security;
-grant select, insert on public.drivers to anon;
+revoke all on public.drivers from anon, authenticated;
+grant select, insert, update, delete on public.drivers to authenticated;
 drop policy if exists "demo_read_drivers" on public.drivers;
 drop policy if exists "demo_add_drivers" on public.drivers;
-create policy "demo_read_drivers" on public.drivers for select to anon using (true);
-create policy "demo_add_drivers" on public.drivers for insert to anon with check (true);
+drop policy if exists "users_read_own_drivers" on public.drivers;
+drop policy if exists "users_add_own_drivers" on public.drivers;
+drop policy if exists "users_update_own_drivers" on public.drivers;
+drop policy if exists "users_delete_own_drivers" on public.drivers;
+create policy "users_read_own_drivers" on public.drivers
+  for select to authenticated using (owner_id = (select auth.uid()));
+create policy "users_add_own_drivers" on public.drivers
+  for insert to authenticated with check (owner_id = (select auth.uid()));
+create policy "users_update_own_drivers" on public.drivers
+  for update to authenticated
+  using (owner_id = (select auth.uid()))
+  with check (owner_id = (select auth.uid()));
+create policy "users_delete_own_drivers" on public.drivers
+  for delete to authenticated using (owner_id = (select auth.uid()));
 
 -- Only the server-side MQTT worker can update these tables.
 create table if not exists public.driver_heartbeat_state (
@@ -31,9 +91,17 @@ alter table public.driver_heartbeat_state enable row level security;
 alter table public.driver_daily_service enable row level security;
 revoke all on public.driver_heartbeat_state from anon, authenticated;
 revoke all on public.driver_daily_service from anon, authenticated;
-grant select on public.driver_daily_service to anon;
+grant select on public.driver_daily_service to authenticated;
 drop policy if exists "demo_read_daily_service" on public.driver_daily_service;
-create policy "demo_read_daily_service" on public.driver_daily_service for select to anon using (true);
+drop policy if exists "users_read_own_daily_service" on public.driver_daily_service;
+create policy "users_read_own_daily_service" on public.driver_daily_service
+  for select to authenticated using (
+    exists (
+      select 1 from public.drivers
+      where public.drivers.raspi_unique_id = public.driver_daily_service.raspi_unique_id
+        and public.drivers.owner_id = (select auth.uid())
+    )
+  );
 
 create or replace function public.record_driver_heartbeat(
   p_raspi_unique_id text,
@@ -102,10 +170,17 @@ create index if not exists driver_logs_serial_id_idx
   on public.driver_logs (raspi_unique_id, id desc);
 alter table public.driver_logs enable row level security;
 revoke all on public.driver_logs from anon, authenticated;
-grant select on public.driver_logs to anon;
+grant select on public.driver_logs to authenticated;
 drop policy if exists "demo_read_driver_logs" on public.driver_logs;
-create policy "demo_read_driver_logs" on public.driver_logs
-  for select to anon using (true);
+drop policy if exists "users_read_own_driver_logs" on public.driver_logs;
+create policy "users_read_own_driver_logs" on public.driver_logs
+  for select to authenticated using (
+    exists (
+      select 1 from public.drivers
+      where public.drivers.raspi_unique_id = public.driver_logs.raspi_unique_id
+        and public.drivers.owner_id = (select auth.uid())
+    )
+  );
 
 -- The service-role worker inserts a log and updates driving time together.
 -- Duplicate QoS 1 deliveries keep one history entry and do not count twice.
@@ -139,4 +214,7 @@ revoke all on function public.record_driver_log(text,jsonb,text)
   from public, anon, authenticated;
 grant execute on function public.record_driver_log(text,jsonb,text)
   to service_role;
+
+-- Make new columns and policies visible to PostgREST immediately after migration.
+notify pgrst, 'reload schema';
 

@@ -2,7 +2,7 @@ import mqtt, { type MqttClient } from "mqtt";
 import type { DriverLog } from "./types";
 
 export type MqttConnectionState = "connecting" | "connected" | "disconnected";
-export const LOG_TOPIC = "/waspada/logs/+";
+export const LOG_TOPIC_PREFIX = "/waspada/logs/";
 
 export function parseDriverLog(topic: string, payload: string): DriverLog | null {
   const match = /^\/waspada\/logs\/([^/]+)$/.exec(topic);
@@ -33,10 +33,13 @@ export function parseDriverLog(topic: string, payload: string): DriverLog | null
 }
 
 export function subscribeToDriverLogs(
+  raspiUniqueIds: readonly string[],
   onLog: (log: DriverLog) => void,
   onState: (state: MqttConnectionState, error?: string) => void,
 ): () => void {
   const brokerUrl = process.env.NEXT_PUBLIC_MQTT_BROKER_URL || "wss://broker.hivemq.com:8884/mqtt";
+  const allowedIds = new Set(raspiUniqueIds);
+  const topics = [...allowedIds].map((id) => LOG_TOPIC_PREFIX + id);
   let client: MqttClient;
   try {
     client = mqtt.connect(brokerUrl, { reconnectPeriod: 3000, connectTimeout: 10000, clean: true });
@@ -46,16 +49,18 @@ export function subscribeToDriverLogs(
   }
   onState("connecting");
   client.on("connect", () => {
-    client.subscribe(LOG_TOPIC, { qos: 1 }, (error) => {
-      onState(error ? "disconnected" : "connected", error?.message);
-    });
+    if (!topics.length) {
+      onState("connected");
+      return;
+    }
+    client.subscribe(topics, { qos: 1 }, (error) => onState(error ? "disconnected" : "connected", error?.message));
   });
   client.on("reconnect", () => onState("connecting"));
   client.on("close", () => onState("disconnected"));
   client.on("error", (error) => onState("disconnected", error.message));
   client.on("message", (topic, payload) => {
     const log = parseDriverLog(topic, payload.toString());
-    if (log) onLog(log);
+    if (log && allowedIds.has(log.raspiUniqueId)) onLog(log);
   });
   return () => client.end(true);
 }

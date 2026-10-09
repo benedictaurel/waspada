@@ -10,6 +10,7 @@ import DriverMap from "@/components/driver-map";
 import { FleetInsights } from "@/components/fleet-insights";
 import { Sidebar } from "@/components/sidebar";
 import { Icon } from "@/components/icon";
+import { AccountMenu } from "@/components/account-menu";
 
 const LIVE_LIMIT = 100;
 const HISTORY_PAGE_SIZE = 25;
@@ -76,6 +77,7 @@ export default function Dashboard() {
   const historyRequest = useRef(0);
   const dialogRef = useRef<HTMLElement>(null);
   const configured = Boolean(getSupabase());
+  const driverSerials = useMemo(() => drivers.map((driver) => driver.raspi_unique_id), [drivers]);
 
   const loadDrivers = useCallback(async () => {
     const supabase = getSupabase();
@@ -115,6 +117,7 @@ export default function Dashboard() {
     return () => window.clearInterval(timer);
   }, [loadDailyTotals]);
   useEffect(() => subscribeToDriverLogs(
+    driverSerials,
     (log) => {
       setLiveLogs((current) => current.some((item) => item.raspiUniqueId === log.raspiUniqueId && item.timestamp === log.timestamp) ? current : [log, ...current].slice(0, LIVE_LIMIT));
       setLatestById((current) => {
@@ -124,7 +127,7 @@ export default function Dashboard() {
       });
     },
     (state, error) => { setConnection(state); setMqttError(error || ""); },
-  ), []);
+  ), [driverSerials]);
 
   useEffect(() => {
     const supabase = getSupabase();
@@ -259,7 +262,7 @@ export default function Dashboard() {
       <main className="main-content">
         <header className="topbar">
           <div className="breadcrumb">Workspace <span>/</span> <strong>Overview</strong></div>
-          <div className="topbar-right"><span className={"connection " + connection} role="status"><span className="status-dot" />{connection === "connected" ? "Telemetry connected" : connection === "connecting" ? "Connecting telemetry" : "Telemetry offline"}</span><span className="avatar">OP</span></div>
+          <div className="topbar-right"><span className={"connection " + connection} role="status"><span className="status-dot" />{connection === "connected" ? "Telemetry connected" : connection === "connecting" ? "Connecting telemetry" : "Telemetry offline"}</span><AccountMenu /></div>
         </header>
         <div className="page-content">
           <div className="page-heading">

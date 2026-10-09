@@ -1,5 +1,6 @@
 export type Driver = {
   driver_id: string;
+  owner_id: string;
   name: string;
   mobile_number: string;
   emergency_contact: string;
