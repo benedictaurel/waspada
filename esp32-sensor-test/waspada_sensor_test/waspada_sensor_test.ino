@@ -1,7 +1,7 @@
 /*
  * WASPADA: uji lokal sensor FSR dan AD8232, tanpa Wi-Fi/MQTT.
  * Board sasaran: ESP32 klasik / ESP32-WROOM DevKit 30 pin.
- * Konfigurasi pengguna ada di tab config.h. Default: FSR + Serial Monitor.
+ * Konfigurasi pengguna ada di tab config.h. Default: ECG+FSR, output berlabel untuk Monitor/Plotter.
  * ECG dicetak mentah dalam mV; tidak ada filter ECG, BPM, atau HRV di sini.
  */
 #include <Arduino.h>
@@ -112,6 +112,9 @@ void samplingTask(void* argument) {
 }
 
 void printFsrTuning(const SensorFrame& frame) {
+  // Mode gabungan menghasilkan frame ECG sebelum sampel FSR pertama.
+  // Nilai awal -1 bukan pengukuran dan tidak boleh masuk min/max.
+  if (frame.fsrSamples == 0) return;
   static int64_t lastReportUs = 0;
   static int32_t low[2] = {INT32_MAX, INT32_MAX};
   static int32_t high[2] = {0, 0};
@@ -144,7 +147,7 @@ void printFsrTuning(const SensorFrame& frame) {
 }
 
 void printMonitor(const SensorFrame& frame) {
-  if (TEST_MODE == 1 && FSR_TUNING_VIEW) {
+  if (FSR_ENABLED && FSR_TUNING_VIEW) {
     printFsrTuning(frame);
     return;
   }
@@ -207,13 +210,17 @@ void printPlotter(const SensorFrame& frame) {
                   static_cast<long>(frame.fsrLeftAvgMv),
                   static_cast<long>(frame.fsrRightRawMv),
                   static_cast<long>(frame.fsrRightAvgMv));
-  } else if (TEST_MODE == 2) {
-    Serial.printf("ecg:%ld off:%d\n", static_cast<long>(frame.ecgMv),
-                  (frame.loPlus || frame.loMinus) ? 3300 : 0);
-  } else {
-    Serial.printf("ecg:%ld L:%ld R:%ld off:%d\n", static_cast<long>(frame.ecgMv),
+  } else if (TEST_MODE == 3) {
+    if (frame.fsrSamples == 0) return;
+    // Satu aliran berlabel untuk Monitor dan Plotter Arduino IDE.
+    // Sembunyikan seri FSR di Plotter; Monitor tetap menampilkan nilainya.
+    Serial.printf("ecg:%ld off:%d FSR_L_mV:%ld FSR_R_mV:%ld\n",
+                  static_cast<long>(frame.ecgMv),
+                  (frame.loPlus || frame.loMinus) ? 3300 : 0,
                   static_cast<long>(frame.fsrLeftAvgMv),
-                  static_cast<long>(frame.fsrRightAvgMv),
+                  static_cast<long>(frame.fsrRightAvgMv));
+  } else {
+    Serial.printf("ecg:%ld off:%d\n", static_cast<long>(frame.ecgMv),
                   (frame.loPlus || frame.loMinus) ? 3300 : 0);
   }
 }
@@ -263,10 +270,10 @@ void setup() {
     Serial.printf("# grip: 1=genggam; lepas_long: 1=lepas >= %lld ms. Ini bukan alert kantuk.\n",
                   static_cast<long long>(RELEASE_HOLD_US / 1000));
     Serial.println("# missed/drop harus tetap 0 pada uji normal. Timestamp dalam us sejak boot.");
-    if (TEST_MODE == 1 && FSR_TUNING_VIEW) {
+    if (FSR_ENABLED && FSR_TUNING_VIEW) {
       Serial.println("# TUNING: raw/avg/min/max/span dalam mV. min/max sejak reset.");
       Serial.println("# rel=skala tegangan terhadap ZERO/FULL config, BUKAN persen gaya.");
-      Serial.println("# Tekan EN untuk reset min/max. ECG TIDAK disampling pada TEST_MODE=1.");
+      Serial.println("# Tekan EN untuk reset min/max. ECG hanya disampling pada TEST_MODE=2/3.");
     }
   } else if (OUTPUT_MODE == 3) {
     Serial.println("seq,ts_us,ecg_mv,lo_plus,lo_minus,fsrL_raw_mv,fsrR_raw_mv,"

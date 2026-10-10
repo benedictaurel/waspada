@@ -236,7 +236,7 @@ Jika gelombang sulit diperoleh, pembanding terbaik adalah modul dan elektroda st
 4. Periksa `ecg_Hz` mendekati 250 dan `fsr_Hz` mendekati 50, tidak ada reboot, `missed=0 drop=0` tetap.
 5. Periksa FSR kiri/kanan masih merespons masing-masing tangan.
 6. Periksa ECG dan lead-off tidak dianggap valid hanya karena FSR menyatakan tangan menggenggam. FSR mendeteksi tekanan; kontak elektrik ECG merupakan kondisi berbeda.
-7. Jika ingin melihat grafik bersama, ubah `OUTPUT_MODE 2` lalu upload. Kurva: `ecg`, `L`, `R`, `off`.
+7. Untuk presentasi Arduino IDE pada TEST_MODE=3: OUTPUT_MODE=1 dengan FSR_TUNING_VIEW=true menampilkan tuning FSR lengkap; OUTPUT_MODE=2 mengirim ecg, off, FSR_L_mV, FSR_R_mV dalam satu baris berlabel. Monitor menampilkan semua nilai; hilangkan centang FSR_L_mV dan FSR_R_mV pada Plotter untuk grafik ECG/off saja. Jika daftar label tidak muat, gunakan panah di samping legenda. Kedua panel menerima aliran yang sama, bukan data terpisah. Bila IDE menolak akses port bersamaan, gunakan bergantian.
 8. Pada grafik bersama, FSR ditahan pada nilai terbaru di antara pembacaan 50 Hz. Plotter dibatasi oleh ECG_PLOT_INTERVAL_US=20000 (sekitar maksimal 50 baris/detik); sampling ECG tetap 250 Hz.
 9. Kembali ke Monitor untuk memeriksa counter setelah perubahan format. Setiap upload/reset mengulang counter dari nol.
 

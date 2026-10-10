@@ -6,18 +6,21 @@
 // UBAH DUA ANGKA INI, lalu upload ulang.
 // TEST_MODE: 1 = FSR saja; 2 = ECG saja; 3 = FSR + ECG.
 #ifndef TEST_MODE
-#define TEST_MODE 1
+#define TEST_MODE 3
 #endif
 
-// OUTPUT_MODE: 1 = Serial Monitor; 2 = Serial Plotter; 3 = CSV.
+// OUTPUT_MODE: 1 = Serial Monitor (tuning FSR); 2 = format berlabel Plotter/Monitor;
+// TEST_MODE=3 + OUTPUT_MODE=2: ecg, off, FSR_L_mV, FSR_R_mV.
+// Hilangkan centang kedua seri FSR di Plotter untuk grafik ECG/off saja.
+// 3 = CSV. Pada TEST_MODE=3, kedua sensor tetap dibaca pada semua output.
 #ifndef OUTPUT_MODE
-#define OUTPUT_MODE 1
+#define OUTPUT_MODE 2
 #endif
 
 // Pilih baud yang sama di Serial Monitor / Serial Plotter.
 constexpr unsigned long SERIAL_BAUD = 115200;
 
-// Tampilan tuning hanya untuk TEST_MODE=1 / OUTPUT_MODE=1.
+// Tampilan tuning FSR pada OUTPUT_MODE=1, TEST_MODE=1 atau 3.
 constexpr bool FSR_TUNING_VIEW = true;
 // Skala relatif 0..100%, BUKAN persen gaya atau satuan Newton.
 // Ganti ZERO dengan mV saat tanpa genggaman, FULL dengan mV genggaman kuat.
@@ -58,7 +61,7 @@ constexpr int64_t MONITOR_INTERVAL_US = 500000; // Teks tampil 2 Hz.
 constexpr size_t SAMPLE_QUEUE_LENGTH = 256;
 
 static_assert(TEST_MODE >= 1 && TEST_MODE <= 3, "TEST_MODE harus 1, 2, atau 3");
-static_assert(OUTPUT_MODE >= 1 && OUTPUT_MODE <= 3, "OUTPUT_MODE harus 1, 2, atau 3");
+static_assert(OUTPUT_MODE >= 1 && OUTPUT_MODE <= 3, "OUTPUT_MODE harus 1..3");
 static_assert(FSR_AVERAGE_SAMPLES >= 1 && FSR_AVERAGE_SAMPLES <= 32,
               "Jumlah sampel average harus 1..32");
 static_assert(FSR_LEFT_ON_MV > FSR_LEFT_OFF_MV, "Ambang kiri ON harus > OFF");

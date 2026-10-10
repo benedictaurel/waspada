@@ -1,8 +1,17 @@
 # WASPADA — uji lokal sensor ESP32
 
+**Paket presentasi Arduino IDE:** default `TEST_MODE=3`, `OUTPUT_MODE=2`, 115200 baud.
+Mode 3 membaca ECG dan FSR bersamaan. Output 2 mengirim satu baris berlabel
+`ecg`, `off`, `FSR_L_mV`, `FSR_R_mV`. Monitor menampilkan keempat nilai;
+hilangkan centang kedua seri FSR di Plotter agar grafik hanya ECG/off.
+Monitor/Plotter menerima aliran yang sama; firmware tidak bisa mengirim teks
+berbeda ke masing-masing panel. Jika IDE menolak membuka keduanya, gunakan
+bergantian. Output 1 tetap menyediakan tampilan tuning FSR lengkap.
+Untuk pengujian FSR saja, atur TEST_MODE=1 dan OUTPUT_MODE=1 seperti panduan awal.
+
 Buka [panduan lengkap](PANDUAN_UJI.md), lalu buka `waspada_sensor_test/waspada_sensor_test.ino` menggunakan Arduino IDE 2. Simpan `.ino`, `config.h`, dan `sensor_types.h` dalam folder yang sama.
 
-Default sudah disetel untuk **FSR saja + Serial Monitor**, pada **115200 baud** dengan tampilan tuning kontinu. Baca [panduan tuning terbaru](TUNING_FSR.md) untuk raw/avg/min/max/span, bar relatif, serta diagnosis kanal kiri/kanan. Pilihan mode dan threshold ada pada tab `config.h`. ECG diuji setelah FSR dan pemeriksaan rangkaian/elektroda selesai.
+Tampilan tuning memakai **115200 baud**. Baca [panduan tuning terbaru](TUNING_FSR.md) untuk raw/avg/min/max/span, bar relatif, serta diagnosis kanal kiri/kanan. Pilihan mode dan threshold ada pada tab `config.h`. ECG diuji setelah pemeriksaan rangkaian/elektroda selesai.
 
 Rangkaian saat ini menggunakan **breadboard**, dengan FSR dan AD8232 sama-sama terpasang. Kode dapat digunakan sebelum membuat PCB. Sensor boleh tetap terhubung; pemilihan mode hanya mengatur pembacaan software.
 
