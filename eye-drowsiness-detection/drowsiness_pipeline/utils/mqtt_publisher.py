@@ -6,6 +6,8 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+from drowsiness_pipeline.logic.sensor_fusion import FusionResult, SensorFrame
+
 
 def read_raspi_serial() -> str:
     """Read the Pi serial used as RaspiUniqueID in the dashboard."""
@@ -46,13 +48,25 @@ class MqttPublisher:
         self._client.connect(host, port, keepalive=60)
         self._client.loop_start()
 
-    def publish(self, drowsy: bool) -> None:
-        payload = json.dumps({
+    def publish(self, drowsy: bool, *, fusion: FusionResult | None = None,
+                frame: SensorFrame | None = None) -> None:
+        data = {
             "latitude": self.latitude,
             "longitude": self.longitude,
             "drowsy": drowsy,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-        })
+        }
+        if fusion is not None and frame is not None:
+            data["signals"] = {
+                "ear": {"drowsy": fusion.ear_flag, "weight": 0.50},
+                "ecg": {"drowsy": fusion.ecg_flag, "weight": 0.30,
+                        "source": "fsr_demo_proxy", "state": frame.ecg_state},
+                "fsr": {"drowsy": fusion.fsr_flag, "weight": 0.20,
+                        "left_mv": frame.left_mv, "right_mv": frame.right_mv,
+                        "left_state": frame.left_state, "right_state": frame.right_state},
+                "score": fusion.score,
+            }
+        payload = json.dumps(data)
         result = self._client.publish(self.topic, payload, qos=1, retain=False)
         if result.rc != 0:
             raise RuntimeError(f"MQTT publish failed with code {result.rc}")

@@ -13,6 +13,7 @@ from drowsiness_pipeline.utils.mqtt_publisher import MqttPublisher
 from drowsiness_pipeline.camera import CameraConfig, WebcamCapture
 from drowsiness_pipeline.core import FaceLandmarkDetector, average_ear
 from drowsiness_pipeline.logic import DrowsinessMonitor, DrowsinessStatus
+from drowsiness_pipeline.logic.sensor_fusion import UartSensorReader, calculate_fusion
 from drowsiness_pipeline.utils import FramePreprocessor, draw_status
 
 
@@ -74,6 +75,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mqtt-latitude", type=float, help="device latitude")
     parser.add_argument("--mqtt-longitude", type=float, help="device longitude")
     parser.add_argument("--mqtt-interval", type=float, default=5.0, help="seconds between status messages")
+    parser.add_argument("--uart-port", help="ESP32 UART port, for example /dev/serial0")
+    parser.add_argument("--uart-baud", type=int, default=115200)
     return parser
 
 
@@ -87,6 +90,8 @@ def _validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) ->
         parser.error("--log-interval must be greater than 0")
     if args.max_frames is not None and args.max_frames < 1:
         parser.error("--max-frames must be at least 1")
+    if args.uart_baud < 1:
+        parser.error("--uart-baud must be positive")
     if args.mqtt:
         if args.mqtt_latitude is None or not math.isfinite(args.mqtt_latitude) or not -90 <= args.mqtt_latitude <= 90:
             parser.error("--mqtt-latitude must be between -90 and 90")
@@ -123,8 +128,11 @@ def run(args: argparse.Namespace) -> int:
     frames_seen = 0
     last_log_time = time.perf_counter()
     publisher = None
+    sensor_reader = None
     last_publish_time = 0.0
     last_published_status = None
+    last_fusion_alert = False
+    uart_healthy = None
 
     try:
         if args.mqtt:
@@ -135,6 +143,8 @@ def run(args: argparse.Namespace) -> int:
                 port=args.mqtt_port,
             )
             print(f"[MQTT] Publishing as {publisher.raspi_id} to {publisher.topic}", flush=True)
+        if args.uart_port:
+            sensor_reader = UartSensorReader(args.uart_port, args.uart_baud)
         with WebcamCapture(camera_config) as camera, FaceLandmarkDetector(
             model_path=args.model_path
         ) as detector:
@@ -160,8 +170,26 @@ def run(args: argparse.Namespace) -> int:
                     else:
                         status = monitor.update(average_ear(eyes.left, eyes.right))
 
-                    if status.alert_started:
+                    fusion = None
+                    if sensor_reader is not None:
+                        sensor_reader.poll(time.monotonic())
+                        if (sensor_reader.latest is not None and
+                                time.monotonic() - sensor_reader.last_received_at <= 1.0 and
+                                status.face_detected):
+                            fusion = calculate_fusion(status.alert_active, sensor_reader.latest)
+                        current_health = fusion is not None
+                        if current_health != uart_healthy:
+                            print(f"[Fusion] {'ready' if current_health else 'unavailable: UART or face missing'}", flush=True)
+                            uart_healthy = current_health
+
+                    if sensor_reader is None:
+                        alert_started = status.alert_started
+                    else:
+                        alert_started = fusion is not None and fusion.drowsy and not last_fusion_alert
+                    last_fusion_alert = fusion.drowsy if fusion is not None else False
+                    if alert_started:
                         print(
+                            f"ALERT: score={fusion.score:.2f}" if fusion is not None else
                             f"ALERT: eyes closed for {status.closed_frames} processed frames "
                             f"(EAR={status.ear:.3f})",
                             flush=True,
@@ -178,14 +206,15 @@ def run(args: argparse.Namespace) -> int:
                             )
                     if publisher is not None:
                         publish_now = time.perf_counter()
-                        if (
-                            status.alert_active != last_published_status
-                            or publish_now - last_publish_time >= args.mqtt_interval
-                        ):
+                        publish_status = fusion.drowsy if fusion is not None else status.alert_active
+                        if (sensor_reader is None or fusion is not None) and (
+                                publish_status != last_published_status or
+                                publish_now - last_publish_time >= args.mqtt_interval):
                             try:
-                                publisher.publish(status.alert_active)
+                                publisher.publish(publish_status, fusion=fusion,
+                                                  frame=sensor_reader.latest if sensor_reader is not None else None)
                                 last_publish_time = publish_now
-                                last_published_status = status.alert_active
+                                last_published_status = publish_status
                             except Exception as exc:
                                 print(f"[MQTT publish error] {exc}", flush=True)
                 else:
@@ -212,6 +241,8 @@ def run(args: argparse.Namespace) -> int:
     finally:
         if publisher is not None:
             publisher.close()
+        if sensor_reader is not None:
+            sensor_reader.close()
         if not args.no_display:
             cv2.destroyAllWindows()
 
