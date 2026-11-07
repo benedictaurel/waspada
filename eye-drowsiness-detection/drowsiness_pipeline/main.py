@@ -36,14 +36,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--camera-index", type=int, default=0)
     parser.add_argument("--width", type=int, default=640)
     parser.add_argument("--height", type=int, default=480)
-    parser.add_argument("--fps", type=int, default=30, help="requested capture FPS")
+    parser.add_argument("--fps", type=int, default=15, help="requested capture FPS")
     parser.add_argument(
         "--model-path",
         default=None,
         help="optional path to a MediaPipe Face Landmarker .task model",
     )
-    parser.add_argument("--ear-threshold", type=float, default=0.22)
-    parser.add_argument("--consecutive-frames", type=int, default=18)
+    parser.add_argument("--ear-threshold", type=float, default=0.18)
+    parser.add_argument("--consecutive-frames", type=int, default=12)
     parser.add_argument(
         "--process-every",
         type=int,

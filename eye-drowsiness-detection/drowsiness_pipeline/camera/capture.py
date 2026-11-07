@@ -10,9 +10,9 @@ from picamera2 import Picamera2
 @dataclass(frozen=True)
 class CameraConfig:
     index: int = 0
-    width: int = 1280
-    height: int = 720
-    fps: int = 30
+    width: int = 640
+    height: int = 480
+    fps: int = 15
 
 
 class WebcamCapture:

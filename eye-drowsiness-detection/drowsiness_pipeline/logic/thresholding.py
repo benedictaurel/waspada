@@ -17,7 +17,7 @@ class DrowsinessStatus:
 class DrowsinessMonitor:
     """Trigger after EAR remains below a threshold for enough frames."""
 
-    def __init__(self, ear_threshold: float = 0.22, consecutive_frames: int = 18) -> None:
+    def __init__(self, ear_threshold: float = 0.18, consecutive_frames: int = 12) -> None:
         if not 0.0 < ear_threshold < 1.0:
             raise ValueError("ear_threshold must be between 0 and 1")
         if consecutive_frames < 1:

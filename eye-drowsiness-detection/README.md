@@ -38,10 +38,8 @@ Press `q` or Escape to exit. Useful deployment options:
 ```powershell
 python -m drowsiness_pipeline.main --clahe --width 320 --height 240
 python -m drowsiness_pipeline.main --no-display --process-every 2
-python -m drowsiness_pipeline.main --ear-threshold 0.22 --consecutive-frames 18
+python -m drowsiness_pipeline.main --ear-threshold 0.18 --consecutive-frames 12
 ```
-
-Defaults follow the implementation plan: EAR below `0.22` for 18 processed frames triggers an alert. Tune both values for the driver, camera, lighting, and effective inference rate. If `--process-every` is greater than 1, the counter is based on processed frames, so reduce `--consecutive-frames` to retain the same wall-clock trigger delay.
 
 The detector uses MediaPipe's Tasks Face Landmarker API with the official model
 stored at `drowsiness_pipeline/models/face_landmarker.task`. A different model
