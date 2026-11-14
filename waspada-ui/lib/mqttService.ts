@@ -41,26 +41,34 @@ export function subscribeToDriverLogs(
   const allowedIds = new Set(raspiUniqueIds);
   const topics = [...allowedIds].map((id) => LOG_TOPIC_PREFIX + id);
   let client: MqttClient;
+  let disposed = false;
+  const reportState = (state: MqttConnectionState, error?: string) => {
+    if (!disposed) onState(state, error);
+  };
   try {
     client = mqtt.connect(brokerUrl, { reconnectPeriod: 3000, connectTimeout: 10000, clean: true });
   } catch (error) {
-    onState("disconnected", error instanceof Error ? error.message : "MQTT connection failed");
+    reportState("disconnected", error instanceof Error ? error.message : "MQTT connection failed");
     return () => { };
   }
-  onState("connecting");
+  reportState("connecting");
   client.on("connect", () => {
     if (!topics.length) {
-      onState("connected");
+      reportState("connected");
       return;
     }
-    client.subscribe(topics, { qos: 1 }, (error) => onState(error ? "disconnected" : "connected", error?.message));
+    client.subscribe(topics, { qos: 1 }, (error) => reportState(error ? "disconnected" : "connected", error?.message));
   });
-  client.on("reconnect", () => onState("connecting"));
-  client.on("close", () => onState("disconnected"));
-  client.on("error", (error) => onState("disconnected", error.message));
+  client.on("reconnect", () => reportState("connecting"));
+  client.on("close", () => reportState("disconnected"));
+  client.on("error", (error) => reportState("disconnected", error.message));
   client.on("message", (topic, payload) => {
+    if (disposed) return;
     const log = parseDriverLog(topic, payload.toString());
     if (log && allowedIds.has(log.raspiUniqueId)) onLog(log);
   });
-  return () => client.end(true);
+  return () => {
+    disposed = true;
+    client.end(true);
+  };
 }

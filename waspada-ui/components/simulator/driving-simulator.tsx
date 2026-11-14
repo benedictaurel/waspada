@@ -1,15 +1,25 @@
 "use client";
 
-import Image from "next/image";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { subscribeToDriverLogs, type MqttConnectionState } from "@/lib/mqttService";
 import { defaultWheel, readKeyboard, readWheel, validSettings, type WheelSettings } from "@/lib/simulator/input";
 import { spawnVehicle, stepVehicle, type DriveInput, type Vehicle } from "@/lib/simulator/physics";
 import { simulatorConfig } from "@/lib/simulator/config";
 import { createCity } from "@/lib/simulator/world";
+import { useDrowsinessBuzzer } from "@/lib/simulator/drowsiness-buzzer";
 import { WheelSettingsDialog, type PadSnapshot } from "./wheel-settings";
 
 const zeroInput: DriveInput = { steering: 0, throttle: 0, brake: 0, handbrake: false };
 const timeLabel = (s: number) => `${Math.floor(s / 60).toString().padStart(2, "0")}:${Math.floor(s % 60).toString().padStart(2, "0")}`;
+const raspiIdPattern = /^[A-Za-z0-9_-]+$/;
+const raspiStorageKey = "waspada-simulator-raspi-id";
+
+function mqttLabel(state: MqttConnectionState, configured: boolean) {
+  if (!configured) return "MQTT NOT CONFIGURED";
+  if (state === "connected") return "MQTT CONNECTED";
+  if (state === "connecting") return "MQTT CONNECTING";
+  return "MQTT DISCONNECTED";
+}
 
 export function DrivingSimulator() {
   const canvas = useRef<HTMLCanvasElement>(null), stage = useRef<HTMLDivElement>(null);
@@ -21,13 +31,20 @@ export function DrivingSimulator() {
   const [reverse, setReverse] = useState(false);
   const [wheel, setWheel] = useState<WheelSettings>(defaultWheel), [pads, setPads] = useState<PadSnapshot[]>([]), [settingsOpen, setSettingsOpen] = useState(false);
   const [notice, setNotice] = useState("");
+  const configuredRaspiId = process.env.NEXT_PUBLIC_SIMULATOR_RASPI_ID?.trim() || "";
+  const [raspiId, setRaspiId] = useState(configuredRaspiId), [raspiDraft, setRaspiDraft] = useState(configuredRaspiId);
+  const [mqttState, setMqttState] = useState<MqttConnectionState>(configuredRaspiId ? "connecting" : "disconnected");
+  const [mqttError, setMqttError] = useState(""), [raspiError, setRaspiError] = useState("");
+  const [drowsy, setDrowsy] = useState(false), [lastSignal, setLastSignal] = useState<Date | null>(null);
+  const { audioReady, unlockAudio } = useDrowsinessBuzzer(drowsy);
 
   const pause = useCallback(() => { runtime.current.running = false; keys.current.clear(); setRunning(false); }, []);
   const toggleRun = useCallback(() => {
     if (!runtime.current.ready || runtime.current.settingsOpen) return;
+    unlockAudio();
     if (runtime.current.running) pause();
     else { runtime.current.running = true; setRunning(true); setNotice(""); stage.current?.focus(); }
-  }, [pause]);
+  }, [pause, unlockAudio]);
   function reset() {
     pause(); vehicle.current = spawnVehicle(); runtime.current.elapsed = 0; runtime.current.reverse = false;
     setReverse(false); setCar({ ...vehicle.current }); setElapsed(0); setNotice("");
@@ -42,9 +59,57 @@ export function DrivingSimulator() {
   }
   function saveWheel(s: WheelSettings) { setWheel(s); runtime.current.wheel = s; try { localStorage.setItem("waspada-wheel-v1", JSON.stringify(s)); } catch { setNotice("Wheel settings work this session; browser storage is unavailable."); } }
 
+  function saveRaspiId(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const nextId = raspiDraft.trim();
+    if (nextId && !raspiIdPattern.test(nextId)) {
+      setRaspiError("Use only letters, numbers, dashes, or underscores.");
+      return;
+    }
+    setRaspiError("");
+    setRaspiId(nextId);
+    setDrowsy(false);
+    setLastSignal(null);
+    try {
+      if (nextId) localStorage.setItem(raspiStorageKey, nextId);
+      else localStorage.removeItem(raspiStorageKey);
+    } catch { /* The configuration still works for this browser session. */ }
+    setNotice(nextId ? `Listening for Raspberry Pi ${nextId}.` : "Raspberry Pi MQTT monitoring disabled.");
+  }
+
   useEffect(() => {
     try { const saved: unknown = JSON.parse(localStorage.getItem("waspada-wheel-v1") || "null"); if (validSettings(saved)) { setWheel(saved); runtime.current.wheel = saved; } } catch { /* Use the safe defaults. */ }
   }, []);
+  useEffect(() => {
+    const queryId = new URLSearchParams(window.location.search).get("raspiId")?.trim() || "";
+    let storedId = "";
+    try { storedId = localStorage.getItem(raspiStorageKey)?.trim() || ""; } catch { /* Use URL or environment configuration. */ }
+    const initialId = queryId || storedId || configuredRaspiId;
+    if (initialId && raspiIdPattern.test(initialId)) {
+      setRaspiId(initialId);
+      setRaspiDraft(initialId);
+    }
+  }, [configuredRaspiId]);
+  useEffect(() => {
+    setDrowsy(false);
+    setLastSignal(null);
+    setMqttError("");
+    if (!raspiId) {
+      setMqttState("disconnected");
+      return;
+    }
+    return subscribeToDriverLogs(
+      [raspiId],
+      (log) => {
+        setDrowsy(log.drowsy);
+        setLastSignal(new Date());
+      },
+      (state, message) => {
+        setMqttState(state);
+        setMqttError(message || "");
+      },
+    );
+  }, [raspiId]);
   useEffect(() => {
     if (!canvas.current || !stage.current) return;
     const session = runtime.current;
@@ -113,14 +178,30 @@ export function DrivingSimulator() {
 
   const speed = Math.round(Math.abs(car.speed) * 3.6), controller = pads.find(p => p.index === wheel.device);
   return <main className="sim-app">
-    <div className="sim-stage" ref={stage} tabIndex={0} aria-label="First person driving view. W or up to accelerate, S or down to brake, A and D to steer, R to switch drive and reverse at any speed, P to pause.">
+    <div className="sim-stage" ref={stage} tabIndex={0} onPointerDown={unlockAudio} aria-label="First person driving view. W or up to accelerate, S or down to brake, A and D to steer, R to switch drive and reverse at any speed, P to pause.">
       <canvas ref={canvas} className="sim-world" aria-label="Three dimensional city" />
-        <div className="sim-mirror" ref={mirror}><span>REAR CAMERA</span></div>
+        <div className="sim-mirror" ref={mirror} />
         <div className="sim-pillar sim-pillar-left" /><div className="sim-pillar sim-pillar-right" />
         <div className="sim-hood" />
         <div className="sim-cockpit"><div className="sim-dash-seam" /><div className="sim-vent sim-vent-left" /><div className="sim-instruments"><div className="sim-gauge"><span>POWER</span><div className="sim-gauge-arc" /><b>{Math.round(input.throttle * 100)}<small>%</small></b></div><div className="sim-speed"><button className="sim-gear" onClick={() => { changeGear(); stage.current?.focus(); }} aria-label="Switch drive / reverse (R)">{reverse ? "R" : "D"}</button><strong>{speed.toString().padStart(2, "0")}</strong><small>km/h</small><div>{(car.distance / 1000).toFixed(2)} km <span>•</span> {timeLabel(elapsed)}</div></div><div className="sim-gauge"><span>LIMIT</span><div className="sim-limit">{simulatorConfig.speedLimitKmh}</div><small>DRIVE MINDFULLY</small></div></div>
           <div className="sim-steering" style={{ transform: `rotate(${car.steering * wheel.rotation / 2}deg)` }}><svg viewBox="0 0 320 320" aria-label="Steering wheel"><defs><linearGradient id="wheel-rim" x1="0" y1="0" x2="1" y2="1"><stop stopColor="#4b5555" /><stop offset=".5" stopColor="#12191b" /><stop offset="1" stopColor="#363e3f" /></linearGradient></defs><circle cx="160" cy="160" r="136" fill="none" stroke="#090f11" strokeWidth="38" /><circle cx="160" cy="160" r="137" fill="none" stroke="url(#wheel-rim)" strokeWidth="29" /><circle cx="160" cy="160" r="118" fill="none" stroke="#66716c" strokeWidth="1" /><path d="M36 137 125 145 195 145 285 137 278 173 192 184 183 284 137 284 127 184 43 173Z" fill="#242d2f" stroke="#6a7673" strokeWidth="3" /><path d="m148 213 12 55 13-55" fill="none" stroke="#77817c" strokeWidth="4" /><rect x="112" y="119" width="96" height="88" rx="33" fill="#323d3e" stroke="#141e20" strokeWidth="3" /><path d="M158 11h4v17h-4z" fill="#d7b77d" /></svg></div>
-          <div className="sim-center-console"><div className="sim-credits-screen"><Image src={simulatorConfig.creditsImage} width={600} height={800} unoptimized alt="Dashboard credits image" /></div><div className="sim-console-knobs"><i /><span>WASPADA</span><i /></div></div><div className="sim-vent sim-vent-right" />
+          <div className="sim-center-console">
+            <div className={`sim-media-screen${drowsy ? " is-drowsy" : ""}`} role={drowsy ? "alert" : undefined} aria-live={drowsy ? "assertive" : undefined}>
+              {drowsy ? <div className="sim-drowsy-warning">
+                <span className="sim-warning-triangle" aria-hidden="true">!</span>
+                <strong>WAKE UP</strong>
+                <b>DROWSINESS DETECTED</b>
+                <small>{audioReady ? "BUZZER ACTIVE · PULL OVER SAFELY" : "TAP START TO ENABLE BUZZER"}</small>
+              </div> : <div className="sim-music-player">
+                <div className="sim-player-head"><span>WASPADA AUDIO</span><time>{timeLabel(elapsed)}</time></div>
+                <div className="sim-player-content"><div className="sim-album" aria-hidden="true"><span>♪</span></div><div><strong>Night Drive</strong><small>Waspada Radio</small></div></div>
+                <div className="sim-track"><i style={{ width: `${12 + (elapsed % 88)}%` }} /></div>
+                <div className="sim-player-controls" aria-hidden="true"><span>‹</span><b>Ⅱ</b><span>›</span></div>
+              </div>}
+            </div>
+            <div className="sim-console-status"><i className={`is-${mqttState}`} /><span>{mqttLabel(mqttState, Boolean(raspiId))}</span></div>
+            <div className="sim-console-knobs"><i /><span>WASPADA</span><i /></div>
+          </div><div className="sim-vent sim-vent-right" />
         </div>
 
       {!running && ready && !error && !settingsOpen && <div className="sim-paused">
@@ -128,6 +209,14 @@ export function DrivingSimulator() {
         <button className="sim-start" onClick={toggleRun}>▶ {elapsed > 0 ? "Resume drive" : "Start driving"}</button>
         <div className="sim-menu-actions"><button onClick={openWheelSettings}>Wheel setup · F2</button><button onClick={reset}>Reset drive</button><button onClick={toggleFullscreen}>Fullscreen · F</button></div>
         <small>{wheel.enabled && controller ? "Wheel connected" : wheel.enabled ? "Wheel not detected — keyboard available" : "Keyboard ready · FANTECH R1V2 setup available"}</small>
+        <form className="sim-mqtt-setup" onSubmit={saveRaspiId}>
+          <div><strong>Raspberry Pi MQTT</strong><span className={`is-${mqttState}`}><i />{mqttLabel(mqttState, Boolean(raspiId))}</span></div>
+          <label htmlFor="sim-raspi-id">RaspiUniqueID printed by the detector</label>
+          <div className="sim-mqtt-input"><input id="sim-raspi-id" value={raspiDraft} onChange={(event) => setRaspiDraft(event.target.value)} placeholder="e.g. 10000000abcdef01" spellCheck={false} autoComplete="off" /><button type="submit">Connect</button></div>
+          {raspiError && <em>{raspiError}</em>}
+          {mqttError && <em>{mqttError}</em>}
+          {lastSignal && <small>Last signal {lastSignal.toLocaleTimeString()} · drowsy = {String(drowsy)}</small>}
+        </form>
         <div className="sim-key-help">W / S · accelerate / brake<br />A / D · steer &nbsp; R · drive / reverse<br />Space · handbrake &nbsp; Q / E · look<br />Enter · resume &nbsp; P / Esc · pause</div>
       </div>}
       {!ready && !error && <div className="sim-loading">Building your city…</div>}

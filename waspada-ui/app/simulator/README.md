@@ -3,8 +3,36 @@
 Run `pnpm dev` from `waspada-ui`, then open <http://localhost:3000/simulator>.
 The cockpit fills the browser viewport. Press **F** or choose **Fullscreen** in
 the pause menu to hide browser chrome too. All menus appear inside the game.
-The simulator has no detector, MQTT, Supabase, alert, or session-export integrations.
-The existing fleet dashboard is separate and unchanged.
+
+## Raspberry Pi drowsiness alert
+
+The infotainment display normally shows a music player. It changes to a flashing
+**WAKE UP** warning and sounds a repeating in-browser buzzer whenever the selected
+Raspberry Pi publishes `drowsy: true`. Publishing `drowsy: false` restores the
+music player and stops the buzzer. The existing fleet dashboard is unchanged.
+
+The detector and simulator must use the same broker. Set the broker URL in
+`.env.local` and either preselect the Pi or enter its ID in the simulator's pause
+menu:
+
+```dotenv
+NEXT_PUBLIC_MQTT_BROKER_URL=wss://broker.hivemq.com:8884/mqtt
+NEXT_PUBLIC_SIMULATOR_RASPI_ID=10000000abcdef01
+```
+
+The ID is printed by the detector as `[MQTT] Publishing as ...`. It can also be
+selected without changing environment configuration by opening
+`/simulator?raspiId=10000000abcdef01`. The simulator subscribes only to
+`/waspada/logs/<RaspiUniqueID>`; it does not listen to every device on the public
+broker. Start the detector with MQTT enabled, for example:
+
+```powershell
+python -m drowsiness_pipeline.main --mqtt --mqtt-latitude -6.2 --mqtt-longitude 106.8
+```
+
+Browser autoplay rules require one click/tap before sound can play. The simulator
+unlocks its Web Audio buzzer when the driver presses Start/Resume or interacts
+with the driving view.
 
 ## Scene configuration — edit this file
 
@@ -19,12 +47,10 @@ The existing fleet dashboard is separate and unchanged.
 | `fieldOfView` | Forward camera field of view in degrees |
 | `eyeHeight` | Camera height in metres |
 | `speedLimitKmh` | Advisory dashboard speed-limit sign |
-| `creditsImage` | Image URL for the 3:4 portrait dashboard screen |
 | `spawn` | Starting X/Z coordinates in metres and heading in radians |
 
-Put `credits.png` in `public/simulator/` and set `creditsImage` to
-`"/simulator/credits.png"`. Images fit without cropping. Reload after editing;
-when using `pnpm start`, run `pnpm build` and restart to apply source changes.
+Reload after editing; when using `pnpm start`, run `pnpm build` and restart to
+apply source changes.
 
 For deeper changes, `lib/simulator/world.ts` builds the city, materials, roads,
 traffic, and lighting. `lib/simulator/physics.ts` controls acceleration, braking,
